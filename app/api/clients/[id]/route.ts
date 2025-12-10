@@ -1,18 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
-export const dynamic = 'force-dynamic';
-
+export const dynamic = "force-dynamic"; // important
 
 const prisma = new PrismaClient();
 
-// GET single client
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "Client id is required" },
+        { status: 400 }
+      );
+    }
 
     const client = await prisma.client.findUnique({
       where: { id },
@@ -26,20 +31,27 @@ export async function GET(
     return NextResponse.json({ client });
   } catch (err: any) {
     console.error("GET CLIENT ERROR:", err);
+    // Never throw raw error – always return JSON
     return NextResponse.json(
-      { error: err.message || "Server error" },
+      { error: "Server error while fetching client" },
       { status: 500 }
     );
   }
 }
 
-// POST – update stats
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "Client id is required" },
+        { status: 400 }
+      );
+    }
 
     const body = await req.json();
     const {
@@ -55,9 +67,6 @@ export async function POST(
     if (action !== "updateStats") {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
-
-    console.log("UPDATE CLIENT ID:", id);
-    console.log("BODY:", body);
 
     const client = await prisma.client.update({
       where: { id },
@@ -76,7 +85,7 @@ export async function POST(
   } catch (err: any) {
     console.error("UPDATE CLIENT ERROR:", err);
     return NextResponse.json(
-      { error: err.message || "Server error" },
+      { error: "Server error while updating client" },
       { status: 500 }
     );
   }
