@@ -8,10 +8,7 @@
     "start": "next start",
     "lint": "eslint"
   },
-  "prisma": {
-    "seed": "ts-node ./prisma/seed.ts"
-  },
-  "dependencies": {
+    "dependencies": {
     "@prisma/client": "^5.13.0",
     "bcryptjs": "^2.4.3",
     "dotenv": "^17.2.3",
