@@ -1,0 +1,123 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Trainer {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  name     String
+  email    String @unique
+  password String
+  gymName  String
+  upiId    String
+
+  clients  Client[]
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Client {
+  id                String    @id @default(auto()) @map("_id") @db.ObjectId
+  name              String
+  email             String    @unique
+  password          String?   // ✅ NEW: Null until payment verified
+  currentWeight     Float
+  goalWeight        Float
+  plan              String
+  progress          Int
+  sessionsCompleted Int
+  sessionsTotal     Int
+  
+  // ✅ NEW: Payment & Subscription Status
+  paymentStatus     String    @default("pending") // "pending" | "completed" | "failed" | "expired"
+  subscriptionDate  DateTime? // When payment was verified
+  subscriptionEndDate DateTime? // Auto-expire after 30/60/90 days
+  planDuration      Int       @default(30) // Days (30, 60, 90)
+  planAmount        Int       @default(0) // Amount paid in paise (e.g., 5000 = ₹50)
+  
+  // ✅ NEW: Track if credentials were sent
+  credentialsSent   Boolean   @default(false)
+  
+  workouts          Workout[]
+  diets             Diet[]
+  trainerId         String    @db.ObjectId
+  trainer           Trainer   @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  payment           Payment?  @relation(fields: [paymentId], references: [id])
+  paymentId         String?   @db.ObjectId
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  checklistItems    ChecklistItem[]
+}
+
+model Payment {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  razorpayOrderId String   @unique
+  razorpayPaymentId String? @unique // Filled after payment
+  razorpaySignature String? // For verification
+  
+  amount          Int      // Amount in paise (e.g., 5000 = ₹50)
+  currency        String   @default("INR")
+  status          String   @default("pending") // "pending" | "completed" | "failed"
+  clientEmail     String
+  clientName      String
+  
+  // ✅ NEW: Plan details
+  planDuration    Int      @default(30) // 30, 60, 90 days
+  notes           String?
+
+  trainerId       String   @db.ObjectId
+  trainer         Trainer  @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  
+  clients         Client[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Workout {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  exercise String
+  sets     String
+  reps     String
+  weight   String
+
+  clientId String @db.ObjectId
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model Diet {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  time     String
+  meal     String
+  calories Int
+
+  clientId String @db.ObjectId
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model ChecklistItem {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  date      String
+  type      String  @default("workout") // "workout" | "diet"
+  itemId    String
+  completed Boolean @default(false)
+
+  clientId String @db.ObjectId
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, date, type, itemId])
+}
