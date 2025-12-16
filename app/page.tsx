@@ -1,65 +1,370 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
+
+export default function HomePage() {
+  const router = useRouter();
+  const [isHovering, setIsHovering] = useState(false);
+  const [activeFeature, setActiveFeature] = useState(0);
+
+  const features = [
+    {
+      icon: "📊",
+      title: "Live Dashboard",
+      desc: "Real-time progress tracking with weight, workouts, and diet status.",
+    },
+    {
+      icon: "🏋️",
+      title: "Custom Workouts",
+      desc: "Personalized exercises with sets, reps, and progressive overload.",
+    },
+    {
+      icon: "🍎",
+      title: "Meal Planning",
+      desc: "Daily nutrition tracking with calorie and macro monitoring.",
+    },
+    {
+      icon: "📈",
+      title: "Progress Charts",
+      desc: "Visual weekly completion rates and achievement milestones.",
+    },
+  ];
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0f1423 100%)",
+        color: "white",
+        display: "flex",
+        flexDirection: "column",
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      {/* Animated gradient orbs */}
+      <div
+        style={{
+          position: "absolute",
+          width: "700px",
+          height: "700px",
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(59,130,246,0.12), transparent 70%)",
+          top: "-150px",
+          left: "-100px",
+          pointerEvents: "none",
+          animation: "float 15s ease-in-out infinite",
+        }}
+      />
+      <div
+        style={{
+          position: "absolute",
+          width: "600px",
+          height: "600px",
+          borderRadius: "50%",
+          background: "radial-gradient(circle, rgba(139,92,246,0.08), transparent 70%)",
+          bottom: "-100px",
+          right: "-50px",
+          pointerEvents: "none",
+          animation: "float 18s ease-in-out infinite reverse",
+        }}
+      />
+
+      {/* Navigation */}
+      <nav
+        style={{
+          width: "100%",
+          padding: "24px 32px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          position: "relative",
+          zIndex: 2,
+          backdropFilter: "blur(20px)",
+          borderBottom: "1px solid rgba(59,130,246,0.08)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: "50%",
+              background: "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 28,
+              boxShadow: "0 8px 32px rgba(59,130,246,0.4), inset 0 1px 0 rgba(255,255,255,0.1)",
+            }}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            💪
+          </div>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 950, letterSpacing: -0.8 }}>
+              Aadi
+            </h1>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 10,
+                color: "#3b82f6",
+                letterSpacing: 2,
+                textTransform: "uppercase",
+                fontWeight: 600,
+              }}
+            >
+              Fitness
+            </p>
+          </div>
         </div>
-      </main>
+
+        <button
+          onClick={() => router.push("/login")}
+          style={{
+            padding: "10px 24px",
+            borderRadius: "999px",
+            border: "1px solid rgba(59,130,246,0.5)",
+            background: "rgba(59,130,246,0.1)",
+            color: "#3b82f6",
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: "pointer",
+            transition: "all 0.3s ease",
+            backdropFilter: "blur(10px)",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "rgba(59,130,246,0.2)";
+            e.currentTarget.style.borderColor = "rgba(59,130,246,0.8)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "rgba(59,130,246,0.1)";
+            e.currentTarget.style.borderColor = "rgba(59,130,246,0.5)";
+          }}
+        >
+          Sign in
+        </button>
+      </nav>
+
+      {/* Hero section */}
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "40px 16px",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        {/* Tagline */}
+        <p
+          style={{
+            fontSize: 12,
+            color: "#3b82f6",
+            fontWeight: 700,
+            letterSpacing: 3,
+            textTransform: "uppercase",
+            marginBottom: 24,
+            opacity: 0.9,
+          }}
+        >
+          Personal Training Evolved
+        </p>
+
+        {/* Main headline */}
+        <h1
+          style={{
+            fontSize: 60,
+            fontWeight: 950,
+            margin: "0 0 20px 0",
+            lineHeight: 1.05,
+            maxWidth: 900,
+            color: "#f8fafc",
+            textShadow: "0 20px 40px rgba(59,130,246,0.15)",
+          }}
+        >
+          Train with{" "}
+          <span
+            style={{
+              background: "linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)",
+              backgroundClip: "text",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
+            Aadi&apos;s system.
+          </span>
+          <br />
+          Track everything. Own your results.
+        </h1>
+
+        {/* Subheading */}
+        <p
+          style={{
+            fontSize: 17,
+            color: "#cbd5e1",
+            margin: "0 0 28px 0",
+            maxWidth: 600,
+            lineHeight: 1.7,
+            fontWeight: 400,
+          }}
+        >
+          A complete platform for trainers to coach and clients to excel. Workouts, nutrition, weekly goals—all synced in real-time.
+        </p>
+
+        {/* CTA Buttons */}
+        <div
+          style={{
+            display: "flex",
+            gap: 12,
+            marginBottom: 48,
+            flexWrap: "wrap",
+            justifyContent: "center",
+          }}
+        >
+          <button
+            onClick={() => router.push("/login")}
+            onMouseEnter={() => setIsHovering(true)}
+            onMouseLeave={() => setIsHovering(false)}
+            style={{
+              padding: "16px 36px",
+              borderRadius: "999px",
+              border: "none",
+              background: isHovering
+                ? "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)"
+                : "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
+              color: "white",
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: "pointer",
+              boxShadow: isHovering
+                ? "0 20px 60px rgba(59,130,246,0.5)"
+                : "0 12px 30px rgba(59,130,246,0.3)",
+              transition: "all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
+              transform: isHovering ? "translateY(-2px)" : "translateY(0)",
+              letterSpacing: 0.3,
+            }}
+          >
+            Begin Your Journey
+          </button>
+
+          <button
+            onClick={() => router.push("/login")}
+            style={{
+              padding: "16px 36px",
+              borderRadius: "999px",
+              border: "1.5px solid rgba(59,130,246,0.4)",
+              background: "rgba(59,130,246,0.05)",
+              color: "#60a5fa",
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: "pointer",
+              transition: "all 0.3s ease",
+              letterSpacing: 0.3,
+              backdropFilter: "blur(10px)",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(59,130,246,0.15)";
+              e.currentTarget.style.borderColor = "rgba(59,130,246,0.6)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(59,130,246,0.05)";
+              e.currentTarget.style.borderColor = "rgba(59,130,246,0.4)";
+            }}
+          >
+            Sign in
+          </button>
+        </div>
+
+        {/* Feature showcase - 2x2 GRID */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, 1fr)",
+            gap: 20,
+            maxWidth: 900,
+            width: "100%",
+          }}
+        >
+          {features.map((feature, idx) => (
+            <div
+              key={idx}
+              onMouseEnter={() => setActiveFeature(idx)}
+              style={{
+                padding: 28,
+                borderRadius: 16,
+                background:
+                  activeFeature === idx
+                    ? "linear-gradient(135deg, rgba(59,130,246,0.2), rgba(139,92,246,0.1))"
+                    : "rgba(30,40,60,0.5)",
+                border:
+                  activeFeature === idx
+                    ? "1px solid rgba(59,130,246,0.4)"
+                    : "1px solid rgba(59,130,246,0.1)",
+                backdropFilter: "blur(10px)",
+                transition: "all 0.3s ease",
+                cursor: "pointer",
+                transform: activeFeature === idx ? "translateY(-4px)" : "translateY(0)",
+                boxShadow:
+                  activeFeature === idx
+                    ? "0 16px 40px rgba(59,130,246,0.2)"
+                    : "0 8px 16px rgba(0,0,0,0.3)",
+              }}
+            >
+              <p style={{ fontSize: 40, margin: "0 0 12px 0" }}>{feature.icon}</p>
+              <h3
+                style={{
+                  margin: "0 0 8px 0",
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: "#e0e7ff",
+                }}
+              >
+                {feature.title}
+              </h3>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: 13,
+                  color: "#a5b4fc",
+                  lineHeight: 1.5,
+                }}
+              >
+                {feature.desc}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <footer
+        style={{
+          padding: "16px 32px",
+          textAlign: "center",
+          fontSize: 12,
+          color: "#475569",
+          borderTop: "1px solid rgba(59,130,246,0.08)",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        © {new Date().getFullYear()} Aadi Fitness. Where trainers and clients transform together.
+      </footer>
+
+      {/* CSS Animations */}
+      <style>{`
+        @keyframes float {
+          0%, 100% { transform: translateY(0px) translateX(0px); }
+          25% { transform: translateY(-30px) translateX(15px); }
+          50% { transform: translateY(-60px) translateX(0px); }
+          75% { transform: translateY(-30px) translateX(-15px); }
+        }
+      `}</style>
     </div>
   );
 }

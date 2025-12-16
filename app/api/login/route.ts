@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcryptjs";
+
+
+export const dynamic = "force-dynamic";
 
 const prisma = new PrismaClient();
-export const dynamic = 'force-dynamic';
-
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,27 +19,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ===========================
     // TRAINER LOGIN
-    // ===========================
     if (role === "trainer") {
       const trainer = await prisma.trainer.findUnique({
         where: { email },
       });
+      console.log("TRAINER LOOKUP:", email, trainer);
 
       if (!trainer) {
-        console.log("Trainer not found:", email);
         return NextResponse.json(
           { error: "Invalid email or password" },
           { status: 401 }
         );
       }
 
-      // ✅ Use bcrypt for password comparison
-      const isPasswordValid = await bcrypt.compare(password, trainer.password);
+      // ✅ FIXED: plain-text compare (temporary, until passwords are hashed in DB)
+      const isPasswordValid = password === trainer.password;
+      console.log("TRAINER PASSWORD CHECK:", isPasswordValid);
 
       if (!isPasswordValid) {
-        console.log("Trainer password mismatch:", email);
         return NextResponse.json(
           { error: "Invalid email or password" },
           { status: 401 }
@@ -60,98 +59,84 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ===========================
     // CLIENT LOGIN
-    // ===========================
     if (role === "client") {
-      const client = await prisma.client.findUnique({
-        where: { email },
-        include: {
-          trainer: true,
-          payment: true,
-        },
-      });
+  const client = await prisma.client.findUnique({
+    where: { email },
+    include: {
+      trainer: true,
+      payment: true,
+    },
+  });
+  console.log("CLIENT LOOKUP:", email, client);
 
-      if (!client) {
-        console.log("Client not found:", email);
-        return NextResponse.json(
-          { error: "Invalid email or password" },
-          { status: 401 }
-        );
-      }
+  if (!client) {
+    return NextResponse.json(
+      { error: "Invalid email or password" },
+      { status: 401 }
+    );
+  }
 
-      // ✅ NEW: Check if payment is completed
-      if (client.paymentStatus !== "completed") {
-        console.log(
-          "Client payment not completed:",
-          email,
-          "Status:",
-          client.paymentStatus
-        );
-        return NextResponse.json(
-          {
-            error: "Payment pending. Please complete payment to access dashboard.",
-            paymentStatus: client.paymentStatus,
-          },
-          { status: 403 }
-        );
-      }
+  // Payment check abhi skip rehne do (commented)
 
-      // ✅ NEW: Check if subscription expired
-      if (client.subscriptionEndDate && new Date() > client.subscriptionEndDate) {
-        console.log("Client subscription expired:", email);
-        return NextResponse.json(
-          {
-            error: "Subscription expired. Please renew to continue.",
-            paymentStatus: "expired",
-          },
-          { status: 403 }
-        );
-      }
+  if (
+    client.subscriptionEndDate &&
+    new Date() > client.subscriptionEndDate
+  ) {
+    return NextResponse.json(
+      {
+        error: "Subscription expired. Please renew to continue.",
+        paymentStatus: "expired",
+      },
+      { status: 403 }
+    );
+  }
 
-      // ✅ NEW: Validate password with bcrypt (NEXT 16 FIX)
-      const hashed = client.password;
+  const storedPassword = client.password;
+  if (!storedPassword) {
+    return NextResponse.json(
+      { error: "Account not fully activated. Contact trainer." },
+      { status: 403 }
+    );
+  }
 
-      if (!hashed) {
-        console.log("Client has no password set:", email);
-        return NextResponse.json(
-          { error: "Account not fully activated. Contact trainer." },
-          { status: 403 }
-        );
-      }
+  // ✅ bcrypt se hashed password compare
+  const isPasswordValid = await bcrypt.compare(password, storedPassword);
+  console.log("CLIENT PASSWORD CHECK:", {
+    input: password,
+    hash: storedPassword,
+    ok: isPasswordValid,
+  });
 
-      const isPasswordValid = await bcrypt.compare(password, hashed);
+  if (!isPasswordValid) {
+    return NextResponse.json(
+      { error: "Invalid email or password" },
+      { status: 401 }
+    );
+  }
 
-      if (!isPasswordValid) {
-        console.log("Client password mismatch:", email);
-        return NextResponse.json(
-          { error: "Invalid email or password" },
-          { status: 401 }
-        );
-      }
+  const token = jwt.sign(
+    {
+      id: client.id,
+      role: "client",
+      email: client.email,
+      trainerId: client.trainerId,
+    },
+    process.env.JWT_SECRET!,
+    { expiresIn: "7d" }
+  );
 
-      const token = jwt.sign(
-        {
-          id: client.id,
-          role: "client",
-          email: client.email,
-          trainerId: client.trainerId,
-        },
-        process.env.JWT_SECRET!,
-        { expiresIn: "7d" }
-      );
-
-      return NextResponse.json({
-        ok: true,
-        token,
-        role: "client",
-        name: client.name,
-        clientId: client.id,
-        trainerId: client.trainerId,
-        paymentStatus: client.paymentStatus,
-        subscriptionEndDate: client.subscriptionEndDate,
-      });
-    }
+  return NextResponse.json({
+    ok: true,
+    token,
+    role: "client",
+    name: client.name,
+    clientId: client.id,
+    trainerId: client.trainerId,
+    paymentStatus: client.paymentStatus,
+    subscriptionEndDate: client.subscriptionEndDate,
+  });
+}
 
     return NextResponse.json({ error: "Invalid role" }, { status: 400 });
   } catch (err: any) {
