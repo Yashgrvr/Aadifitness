@@ -227,7 +227,7 @@ export default function HomePage() {
           }}
         >
           <button
-            onClick={() => router.push("/login")}
+            onClick={() => router.push("/client/onboarding")}
             onMouseEnter={() => setIsHovering(true)}
             onMouseLeave={() => setIsHovering(false)}
             style={{
