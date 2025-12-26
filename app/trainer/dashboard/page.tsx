@@ -2,6 +2,18 @@
 
 import { useState, useEffect } from "react";
 
+interface PendingClient {
+  id: string;
+  name: string;
+  email: string;
+  currentWeight: number;
+  goalWeight: number;
+  fitnessGoal: string;
+  plan: string;
+  paymentDate: string;
+  passwordGeneratedAt: string | null;
+}
+
 interface Workout {
   id: string;
   exercise: string;
@@ -10,7 +22,7 @@ interface Workout {
   weight: string;
 }
 
-interface Diet {
+interface DietItem {
   id: string;
   time: string;
   meal: string;
@@ -26,281 +38,409 @@ interface Client {
   plan: string;
   progress: number;
   workouts: Workout[];
-  diets: Diet[];
+  diets: DietItem[];
   sessionsCompleted: number;
   sessionsTotal: number;
 }
 
 export default function TrainerDashboard() {
+  const [trainerId, setTrainerId] = useState("");
   const [name, setName] = useState("Trainer");
-  const [clients, setClients] = useState<Client[]>([]);
+  const [pendingClients, setPendingClients] = useState<PendingClient[]>([]);
+  const [allClients, setAllClients] = useState<Client[]>([]);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [loadingPassword, setLoadingPassword] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"pending" | "all">("pending");
+
+  // Workout form states
   const [showWorkoutForm, setShowWorkoutForm] = useState(false);
+  const [workoutExercise, setWorkoutExercise] = useState("");
+  const [workoutSets, setWorkoutSets] = useState("");
+  const [workoutReps, setWorkoutReps] = useState("");
+  const [workoutWeight, setWorkoutWeight] = useState("");
+  const [savingWorkout, setSavingWorkout] = useState(false);
+
+  // Diet form states
   const [showDietForm, setShowDietForm] = useState(false);
+  const [dietTime, setDietTime] = useState("");
+  const [dietMeal, setDietMeal] = useState("");
+  const [dietCalories, setDietCalories] = useState("");
+  const [savingDiet, setSavingDiet] = useState(false);
+
+  // Edit states
   const [editingWorkoutId, setEditingWorkoutId] = useState<string | null>(null);
+  const [editWorkoutExercise, setEditWorkoutExercise] = useState("");
+  const [editWorkoutSets, setEditWorkoutSets] = useState("");
+  const [editWorkoutReps, setEditWorkoutReps] = useState("");
+  const [editWorkoutWeight, setEditWorkoutWeight] = useState("");
+  const [savingEditWorkout, setSavingEditWorkout] = useState(false);
+
   const [editingDietId, setEditingDietId] = useState<string | null>(null);
-  const [showEditStats, setShowEditStats] = useState(false);
+  const [editDietTime, setEditDietTime] = useState("");
+  const [editDietMeal, setEditDietMeal] = useState("");
+  const [editDietCalories, setEditDietCalories] = useState("");
+  const [savingEditDiet, setSavingEditDiet] = useState(false);
 
-  const [workoutForm, setWorkoutForm] = useState({
-    exercise: "",
-    sets: "",
-    reps: "",
-    weight: "",
-  });
-
-  const [dietForm, setDietForm] = useState({
-    time: "",
-    meal: "",
-    calories: "",
-  });
-
-  const [statsForm, setStatsForm] = useState({
-    currentWeight: 0,
-    goalWeight: 0,
-    progress: 0,
-    plan: "",
-    sessionsCompleted: 0,
-    sessionsTotal: 0,
-  });
+  const [isWide, setIsWide] = useState(true);
 
   useEffect(() => {
     const storedRole = localStorage.getItem("role");
     const storedName = localStorage.getItem("name") || "Trainer";
+    const storedTrainerId = localStorage.getItem("trainerId");
 
-    if (storedRole !== "trainer") {
+    if (storedRole !== "trainer" || !storedTrainerId) {
       window.location.href = "/login";
       return;
     }
 
     setName(storedName);
-    fetchClients();
+    setTrainerId(storedTrainerId);
+    fetchPendingClients(storedTrainerId);
+    fetchAllClients(storedTrainerId);
+
+    // Check screen width
+    const handleResize = () => setIsWide(window.innerWidth >= 900);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const fetchClients = async () => {
+  const fetchPendingClients = async (id: string) => {
     try {
-      const trainerId = localStorage.getItem("trainerId");
-      const token = localStorage.getItem("token");
-
-      if (!trainerId) return;
-
-      const res = await fetch(`/api/clients?trainerId=${trainerId}`, {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : "",
-        },
+      const res = await fetch(`/api/trainer/pending-clients`, {
+        headers: { "x-trainer-id": id },
       });
-
-      if (!res.ok) {
-        console.error("Failed to load clients", await res.text());
-        return;
+      if (res.ok) {
+        const data = await res.json();
+        setPendingClients(data.clients || []);
       }
+    } catch (err) {
+      console.error("Error fetching pending clients:", err);
+    }
+  };
 
+  const fetchAllClients = async (id: string) => {
+    try {
+      const res = await fetch(`/api/clients?trainerId=${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setAllClients(data.clients || []);
+        if (data.clients?.length) {
+          setSelectedClient(data.clients[0]);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching all clients:", err);
+    }
+  };
+
+  const handleGeneratePassword = async (clientId: string) => {
+    setLoadingPassword(clientId);
+    try {
+      const res = await fetch("/api/trainer/generate-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId, trainerId }),
+      });
       const data = await res.json();
-      setClients(data.clients || []);
-      if (data.clients?.length) {
-        setSelectedClient(data.clients[0]);
-        initStatsForm(data.clients[0]);
+      if (res.ok) {
+        alert(
+          `✅ Password sent to ${data.clientId}!\nEmail sent: ${data.emailSent}`
+        );
+        fetchPendingClients(trainerId);
+      } else {
+        alert(`❌ Error: ${data.message}`);
       }
     } catch (err) {
-      console.error("Error fetching clients:", err);
+      alert(`❌ Error generating password: ${err}`);
+    } finally {
+      setLoadingPassword(null);
     }
   };
 
-  const initStatsForm = (client: Client) => {
-    setStatsForm({
-      currentWeight: client.currentWeight,
-      goalWeight: client.goalWeight,
-      progress: client.progress,
-      plan: client.plan,
-      sessionsCompleted: client.sessionsCompleted,
-      sessionsTotal: client.sessionsTotal,
-    });
-  };
-
+  // ✅ ADD WORKOUT
   const handleAddWorkout = async () => {
-    if (!selectedClient || !workoutForm.exercise) return;
-
+    if (!selectedClient) return;
+    if (!workoutExercise || !workoutSets || !workoutReps || !workoutWeight) {
+      alert("Please fill all workout fields");
+      return;
+    }
+    setSavingWorkout(true);
     try {
       const res = await fetch("/api/clients/workout", {
-        method: editingWorkoutId ? "PUT" : "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientId: selectedClient.id,
-          ...(editingWorkoutId && { id: editingWorkoutId }),
-          ...workoutForm,
+          exercise: workoutExercise,
+          sets: workoutSets,
+          reps: workoutReps,
+          weight: workoutWeight,
         }),
       });
-
       if (res.ok) {
         const data = await res.json();
-        setSelectedClient(data.client);
-        setClients((prev) =>
-          prev.map((c) => (c.id === data.client.id ? data.client : c))
+        const newWorkout: Workout = data.workout ?? data;
+        setSelectedClient((prev) =>
+          prev ? { ...prev, workouts: [...prev.workouts, newWorkout] } : prev
         );
-        setWorkoutForm({ exercise: "", sets: "", reps: "", weight: "" });
-        setEditingWorkoutId(null);
+        setAllClients((prev) =>
+          prev.map((c) =>
+            c.id === selectedClient.id
+              ? { ...c, workouts: [...c.workouts, newWorkout] }
+              : c
+          )
+        );
+        setWorkoutExercise("");
+        setWorkoutSets("");
+        setWorkoutReps("");
+        setWorkoutWeight("");
         setShowWorkoutForm(false);
+      } else {
+        alert("Failed to add workout");
       }
     } catch (err) {
-      console.error("Error saving workout:", err);
+      console.error("Error adding workout:", err);
+      alert("Error adding workout");
+    } finally {
+      setSavingWorkout(false);
     }
   };
 
-  const handleDeleteWorkout = async (workoutId: string) => {
+  // ✅ EDIT WORKOUT
+  const handleEditWorkout = async (workoutId: string) => {
     if (!selectedClient) return;
-
+    if (
+      !editWorkoutExercise ||
+      !editWorkoutSets ||
+      !editWorkoutReps ||
+      !editWorkoutWeight
+    ) {
+      alert("Please fill all workout fields");
+      return;
+    }
+    setSavingEditWorkout(true);
     try {
-      const res = await fetch("/api/clients/workout", {
-        method: "DELETE",
+      const res = await fetch(`/api/clients/workout/${workoutId}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId: selectedClient.id,
-          id: workoutId,
+          exercise: editWorkoutExercise,
+          sets: editWorkoutSets,
+          reps: editWorkoutReps,
+          weight: editWorkoutWeight,
         }),
       });
-
       if (res.ok) {
         const data = await res.json();
-        setSelectedClient(data.client);
-        setClients((prev) =>
-          prev.map((c) => (c.id === data.client.id ? data.client : c))
+        const updatedWorkout: Workout = data.workout ?? data;
+        setSelectedClient((prev) =>
+          prev
+            ? {
+                ...prev,
+                workouts: prev.workouts.map((w) =>
+                  w.id === workoutId ? updatedWorkout : w
+                ),
+              }
+            : prev
         );
+        setAllClients((prev) =>
+          prev.map((c) =>
+            c.id === selectedClient.id
+              ? {
+                  ...c,
+                  workouts: c.workouts.map((w) =>
+                    w.id === workoutId ? updatedWorkout : w
+                  ),
+                }
+              : c
+          )
+        );
+        setEditingWorkoutId(null);
+      } else {
+        alert("Failed to update workout");
+      }
+    } catch (err) {
+      console.error("Error updating workout:", err);
+      alert("Error updating workout");
+    } finally {
+      setSavingEditWorkout(false);
+    }
+  };
+
+  // ✅ DELETE WORKOUT
+  const handleDeleteWorkout = async (workoutId: string) => {
+    if (!selectedClient || !confirm("Delete this workout?")) return;
+    try {
+      const res = await fetch(`/api/clients/workout/${workoutId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setSelectedClient((prev) =>
+          prev
+            ? {
+                ...prev,
+                workouts: prev.workouts.filter((w) => w.id !== workoutId),
+              }
+            : prev
+        );
+        setAllClients((prev) =>
+          prev.map((c) =>
+            c.id === selectedClient.id
+              ? { ...c, workouts: c.workouts.filter((w) => w.id !== workoutId) }
+              : c
+          )
+        );
+      } else {
+        alert("Failed to delete workout");
       }
     } catch (err) {
       console.error("Error deleting workout:", err);
+      alert("Error deleting workout");
     }
   };
 
-  const handleEditWorkout = (workout: Workout) => {
-    setEditingWorkoutId(workout.id);
-    setWorkoutForm({
-      exercise: workout.exercise,
-      sets: workout.sets,
-      reps: workout.reps,
-      weight: workout.weight,
-    });
-    setShowWorkoutForm(true);
-  };
-
+  // ✅ ADD DIET ITEM
   const handleAddDiet = async () => {
-    if (!selectedClient || !dietForm.meal) return;
-
+    if (!selectedClient) return;
+    if (!dietTime || !dietMeal || !dietCalories) {
+      alert("Please fill all diet fields");
+      return;
+    }
+    const caloriesNum = parseInt(dietCalories, 10);
+    if (isNaN(caloriesNum) || caloriesNum <= 0) {
+      alert("Calories must be a positive number");
+      return;
+    }
+    setSavingDiet(true);
     try {
       const res = await fetch("/api/clients/diet", {
-        method: editingDietId ? "PUT" : "POST",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           clientId: selectedClient.id,
-          ...(editingDietId && { id: editingDietId }),
-          time: dietForm.time,
-          meal: dietForm.meal,
-          calories: parseInt(dietForm.calories) || 0,
+          time: dietTime,
+          meal: dietMeal,
+          calories: caloriesNum,
         }),
       });
-
       if (res.ok) {
         const data = await res.json();
-        setSelectedClient(data.client);
-        setClients((prev) =>
-          prev.map((c) => (c.id === data.client.id ? data.client : c))
+        const newDiet: DietItem = data.diet ?? data;
+        setSelectedClient((prev) =>
+          prev ? { ...prev, diets: [...prev.diets, newDiet] } : prev
         );
-        setDietForm({ time: "", meal: "", calories: "" });
-        setEditingDietId(null);
+        setAllClients((prev) =>
+          prev.map((c) =>
+            c.id === selectedClient.id
+              ? { ...c, diets: [...c.diets, newDiet] }
+              : c
+          )
+        );
+        setDietTime("");
+        setDietMeal("");
+        setDietCalories("");
         setShowDietForm(false);
+      } else {
+        alert("Failed to add diet item");
       }
     } catch (err) {
-      console.error("Error saving diet:", err);
+      console.error("Error adding diet:", err);
+      alert("Error adding diet");
+    } finally {
+      setSavingDiet(false);
     }
   };
 
-  const handleDeleteDiet = async (dietId: string) => {
+  // ✅ EDIT DIET ITEM
+  const handleEditDiet = async (dietId: string) => {
     if (!selectedClient) return;
-
+    if (!editDietTime || !editDietMeal || !editDietCalories) {
+      alert("Please fill all diet fields");
+      return;
+    }
+    const caloriesNum = parseInt(editDietCalories, 10);
+    if (isNaN(caloriesNum) || caloriesNum <= 0) {
+      alert("Calories must be a positive number");
+      return;
+    }
+    setSavingEditDiet(true);
     try {
-      const res = await fetch("/api/clients/diet", {
-        method: "DELETE",
+      const res = await fetch(`/api/clients/diet/${dietId}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId: selectedClient.id,
-          id: dietId,
+          time: editDietTime,
+          meal: editDietMeal,
+          calories: caloriesNum,
         }),
       });
-
       if (res.ok) {
         const data = await res.json();
-        setSelectedClient(data.client);
-        setClients((prev) =>
-          prev.map((c) => (c.id === data.client.id ? data.client : c))
+        const updatedDiet: DietItem = data.diet ?? data;
+        setSelectedClient((prev) =>
+          prev
+            ? {
+                ...prev,
+                diets: prev.diets.map((d) =>
+                  d.id === dietId ? updatedDiet : d
+                ),
+              }
+            : prev
         );
+        setAllClients((prev) =>
+          prev.map((c) =>
+            c.id === selectedClient.id
+              ? {
+                  ...c,
+                  diets: c.diets.map((d) =>
+                    d.id === dietId ? updatedDiet : d
+                  ),
+                }
+              : c
+          )
+        );
+        setEditingDietId(null);
+      } else {
+        alert("Failed to update diet item");
+      }
+    } catch (err) {
+      console.error("Error updating diet:", err);
+      alert("Error updating diet");
+    } finally {
+      setSavingEditDiet(false);
+    }
+  };
+
+  // ✅ DELETE DIET ITEM
+  const handleDeleteDiet = async (dietId: string) => {
+    if (!selectedClient || !confirm("Delete this diet item?")) return;
+    try {
+      const res = await fetch(`/api/clients/diet/${dietId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        setSelectedClient((prev) =>
+          prev
+            ? {
+                ...prev,
+                diets: prev.diets.filter((d) => d.id !== dietId),
+              }
+            : prev
+        );
+        setAllClients((prev) =>
+          prev.map((c) =>
+            c.id === selectedClient.id
+              ? { ...c, diets: c.diets.filter((d) => d.id !== dietId) }
+              : c
+          )
+        );
+      } else {
+        alert("Failed to delete diet item");
       }
     } catch (err) {
       console.error("Error deleting diet:", err);
-    }
-  };
-
-  const handleEditDiet = (diet: Diet) => {
-    setEditingDietId(diet.id);
-    setDietForm({
-      time: diet.time,
-      meal: diet.meal,
-      calories: String(diet.calories),
-    });
-    setShowDietForm(true);
-  };
-
-  const handleSaveStats = async () => {
-    if (!selectedClient) return;
-
-    try {
-      // Ensure values are numbers
-      const currentWeight = Number(statsForm.currentWeight) || 0;
-      const goalWeight = Number(statsForm.goalWeight) || 0;
-      const progress = Number(statsForm.progress) || 0;
-      const sessionsCompleted = Number(statsForm.sessionsCompleted) || 0;
-      const sessionsTotal = Number(statsForm.sessionsTotal) || 0;
-
-      console.log("Sending:", {
-        action: "updateStats",
-        currentWeight,
-        goalWeight,
-        progress,
-        plan: statsForm.plan,
-        sessionsCompleted,
-        sessionsTotal,
-      });
-  const res = await fetch(`/api/clients/${selectedClient.id}`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    action: "updateStats",
-    currentWeight,
-    goalWeight,
-    progress,
-    plan: statsForm.plan,
-    sessionsCompleted,
-    sessionsTotal,
-  }),
-});
-
-
-      console.log("Response status:", res.status);
-
-      if (res.ok) {
-        const data = await res.json();
-        console.log("Stats updated successfully:", data);
-        setSelectedClient(data.client);
-        setClients((prev) =>
-          prev.map((c) => (c.id === data.client.id ? data.client : c))
-        );
-        setShowEditStats(false);
-        alert("✅ Stats updated successfully!");
-      } else {
-        const errorData = await res.json();
-        console.error("Update failed:", errorData);
-        alert("❌ Error: " + (errorData.error || "Failed to update stats"));
-      }
-    } catch (err) {
-      console.error("Error updating stats:", err);
-      alert("❌ Network error: " + String(err));
+      alert("Error deleting diet");
     }
   };
 
@@ -309,16 +449,30 @@ export default function TrainerDashboard() {
     window.location.href = "/login";
   };
 
+  const containerStyle: React.CSSProperties = isWide
+    ? {
+        display: "grid",
+        gridTemplateColumns: "280px 1fr",
+        gap: "24px",
+      }
+    : {
+        display: "flex",
+        flexDirection: "column",
+        gap: "16px",
+      };
+
   return (
     <div style={{ minHeight: "100vh", background: "#020617", color: "white" }}>
       {/* HEADER */}
       <header
         style={{
-          padding: "20px 24px",
+          padding: "20px 16px",
           borderBottom: "1px solid #1f2937",
           display: "flex",
           justifyContent: "space-between",
           alignItems: "center",
+          flexWrap: "wrap",
+          gap: "12px",
         }}
       >
         <div>
@@ -345,641 +499,731 @@ export default function TrainerDashboard() {
         </button>
       </header>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "280px 1fr",
-          minHeight: "calc(100vh - 80px)",
-        }}
-      >
-        {/* SIDEBAR */}
-        <div
-          style={{
-            background: "#0b1120",
-            padding: "16px",
-            borderRight: "1px solid #1f2937",
-            overflowY: "auto",
-          }}
-        >
-          <h3
+      <div style={{ padding: "16px" }}>
+        {/* TABS */}
+        <div style={{ marginBottom: "20px", display: "flex", gap: "12px", flexWrap: "wrap" }}>
+          <button
+            onClick={() => setActiveTab("pending")}
             style={{
-              marginBottom: "12px",
-              fontSize: "12px",
-              color: "#9ca3af",
+              padding: "8px 16px",
+              borderRadius: "6px",
+              background: activeTab === "pending" ? "#3b82f6" : "#1f2937",
+              color: "white",
+              border: "none",
+              cursor: "pointer",
+              fontSize: "14px",
               fontWeight: 600,
-              textTransform: "uppercase",
-              letterSpacing: "0.5px",
             }}
           >
-            Your Clients ({clients.length})
-          </h3>
-          <div style={{ display: "grid", gap: "8px" }}>
-            {clients.map((client) => (
-              <button
-                key={client.id}
-                onClick={() => {
-                  setSelectedClient(client);
-                  initStatsForm(client);
-                }}
-                style={{
-                  padding: "12px",
-                  borderRadius: "6px",
-                  background:
-                    selectedClient?.id === client.id ? "#1f2937" : "transparent",
-                  border:
-                    selectedClient?.id === client.id
-                      ? "1px solid #3b82f6"
-                      : "1px solid #1f2937",
-                  color: "white",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  fontSize: "14px",
-                  transition: "all 0.2s",
-                }}
-              >
-                <p style={{ fontWeight: 600, marginBottom: "4px" }}>
-                  {client.name}
-                </p>
-                <p style={{ fontSize: "12px", color: "#9ca3af" }}>
-                  {client.plan}
-                </p>
-              </button>
-            ))}
-          </div>
+            ⏳ Pending Clients ({pendingClients.length})
+          </button>
+          <button
+            onClick={() => setActiveTab("all")}
+            style={{
+              padding: "8px 16px",
+              borderRadius: "6px",
+              background: activeTab === "all" ? "#3b82f6" : "#1f2937",
+              color: "white",
+              border: "none",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: 600,
+            }}
+          >
+            👥 All Clients ({allClients.length})
+          </button>
         </div>
 
-        {/* MAIN */}
-        <div style={{ padding: "24px", overflowY: "auto" }}>
-          {selectedClient ? (
-            <>
-              {/* INFO CARDS */}
+        {/* PENDING CLIENTS TAB */}
+        {activeTab === "pending" && (
+          <div>
+            <h2 style={{ fontSize: "20px", fontWeight: 600, marginBottom: "16px" }}>
+              ⏳ Pending Password Setup
+            </h2>
+            {pendingClients.length === 0 ? (
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    "repeat(auto-fit, minmax(150px, 1fr))",
-                  gap: "12px",
-                  marginBottom: "24px",
+                  background: "#0b1120",
+                  padding: "24px",
+                  borderRadius: "8px",
+                  textAlign: "center",
+                  color: "#9ca3af",
                 }}
               >
-                <InfoCard
-                  label="Current Weight"
-                  value={`${selectedClient.currentWeight} kg`}
-                />
-                <InfoCard
-                  label="Goal Weight"
-                  value={`${selectedClient.goalWeight} kg`}
-                  highlight
-                />
-                <InfoCard
-                  label="Progress"
-                  value={`${selectedClient.progress}%`}
-                  color="#22c55e"
-                />
-                <InfoCard
-                  label="Sessions"
-                  value={`${selectedClient.sessionsCompleted}/${selectedClient.sessionsTotal}`}
-                />
+                <p>No pending clients. All clients have received passwords! ✅</p>
               </div>
-
-              {/* EDIT STATS BUTTON */}
-              <div style={{ marginBottom: "24px", textAlign: "right" }}>
-                <button
-                  onClick={() => setShowEditStats(!showEditStats)}
-                  style={{
-                    padding: "8px 16px",
-                    borderRadius: "4px",
-                    background: "#f59e0b",
-                    color: "white",
-                    border: "none",
-                    cursor: "pointer",
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    transition: "all 0.2s",
-                  }}
-                >
-                  {showEditStats ? "✕ Cancel" : "📝 Edit Stats"}
-                </button>
-              </div>
-
-              {/* EDIT STATS FORM */}
-              {showEditStats && (
-                <div
-                  style={{
-                    background: "#0b1120",
-                    padding: "16px",
-                    borderRadius: "6px",
-                    marginBottom: "24px",
-                    display: "grid",
-                    gap: "12px",
-                    borderLeft: "3px solid #f59e0b",
-                  }}
-                >
-                  <div>
-                    <label style={{ fontSize: "12px", color: "#9ca3af" }}>
-                      Current Weight (kg)
-                    </label>
-                    <input
-                      type="number"
-                      value={statsForm.currentWeight}
-                      onChange={(e) =>
-                        setStatsForm({
-                          ...statsForm,
-                          currentWeight: Number(e.target.value) || 0,
-                        })
-                      }
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: "12px", color: "#9ca3af" }}>
-                      Goal Weight (kg)
-                    </label>
-                    <input
-                      type="number"
-                      value={statsForm.goalWeight}
-                      onChange={(e) =>
-                        setStatsForm({
-                          ...statsForm,
-                          goalWeight: Number(e.target.value) || 0,
-                        })
-                      }
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: "12px", color: "#9ca3af" }}>
-                      Progress (%)
-                    </label>
-                    <input
-                      type="number"
-                      value={statsForm.progress}
-                      onChange={(e) =>
-                        setStatsForm({
-                          ...statsForm,
-                          progress: Number(e.target.value) || 0,
-                        })
-                      }
-                      style={inputStyle}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: "12px", color: "#9ca3af" }}>
-                      Plan
-                    </label>
-                    <input
-                      type="text"
-                      value={statsForm.plan}
-                      onChange={(e) =>
-                        setStatsForm({
-                          ...statsForm,
-                          plan: e.target.value,
-                        })
-                      }
-                      style={inputStyle}
-                    />
-                  </div>
+            ) : (
+              <div style={{ display: "grid", gap: "12px" }}>
+                {pendingClients.map((client) => (
                   <div
+                    key={client.id}
                     style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 1fr",
+                      background: "#0b1120",
+                      padding: "16px",
+                      borderRadius: "8px",
+                      borderLeft: "3px solid #ef4444",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      flexWrap: "wrap",
                       gap: "12px",
                     }}
                   >
-                    <div>
-                      <label style={{ fontSize: "12px", color: "#9ca3af" }}>
-                        Sessions Completed
-                      </label>
-                      <input
-                        type="number"
-                        value={statsForm.sessionsCompleted}
-                        onChange={(e) =>
-                          setStatsForm({
-                            ...statsForm,
-                            sessionsCompleted: Number(e.target.value) || 0,
-                          })
-                        }
-                        style={inputStyle}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "12px", color: "#9ca3af" }}>
-                        Sessions Total
-                      </label>
-                      <input
-                        type="number"
-                        value={statsForm.sessionsTotal}
-                        onChange={(e) =>
-                          setStatsForm({
-                            ...statsForm,
-                            sessionsTotal: Number(e.target.value) || 0,
-                          })
-                        }
-                        style={inputStyle}
-                      />
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleSaveStats}
-                    style={{
-                      padding: "10px",
-                      borderRadius: "4px",
-                      background: "#22c55e",
-                      color: "white",
-                      border: "none",
-                      cursor: "pointer",
-                      fontSize: "14px",
-                      fontWeight: 600,
-                      transition: "all 0.2s",
-                    }}
-                  >
-                    ✓ Save Stats
-                  </button>
-                </div>
-              )}
-
-              {/* WORKOUTS */}
-              <section style={{ marginBottom: "24px" }}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: "12px",
-                  }}
-                >
-                  <h2 style={{ fontSize: "18px", fontWeight: 600 }}>
-                    💪 Workouts
-                  </h2>
-                  <button
-                    onClick={() => {
-                      setShowWorkoutForm(!showWorkoutForm);
-                      if (editingWorkoutId) {
-                        setEditingWorkoutId(null);
-                        setWorkoutForm({
-                          exercise: "",
-                          sets: "",
-                          reps: "",
-                          weight: "",
-                        });
-                      }
-                    }}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: "4px",
-                      background: "#3b82f6",
-                      color: "white",
-                      border: "none",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {showWorkoutForm ? "✕ Cancel" : "+ Add Workout"}
-                  </button>
-                </div>
-
-                {showWorkoutForm && (
-                  <div
-                    style={{
-                      background: "#0b1120",
-                      padding: "12px",
-                      borderRadius: "6px",
-                      marginBottom: "12px",
-                      display: "grid",
-                      gap: "8px",
-                      borderLeft: "3px solid #3b82f6",
-                    }}
-                  >
-                    <input
-                      type="text"
-                      placeholder="Exercise (e.g., Barbell Squat)"
-                      value={workoutForm.exercise}
-                      onChange={(e) =>
-                        setWorkoutForm({
-                          ...workoutForm,
-                          exercise: e.target.value,
-                        })
-                      }
-                      style={inputStyle}
-                    />
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr 1fr",
-                        gap: "8px",
-                      }}
-                    >
-                      <input
-                        type="text"
-                        placeholder="Sets"
-                        value={workoutForm.sets}
-                        onChange={(e) =>
-                          setWorkoutForm({
-                            ...workoutForm,
-                            sets: e.target.value,
-                          })
-                        }
-                        style={inputStyle}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Reps"
-                        value={workoutForm.reps}
-                        onChange={(e) =>
-                          setWorkoutForm({
-                            ...workoutForm,
-                            reps: e.target.value,
-                          })
-                        }
-                        style={inputStyle}
-                      />
-                      <input
-                        type="text"
-                        placeholder="Weight"
-                        value={workoutForm.weight}
-                        onChange={(e) =>
-                          setWorkoutForm({
-                            ...workoutForm,
-                            weight: e.target.value,
-                          })
-                        }
-                        style={inputStyle}
-                      />
-                    </div>
-                    <button
-                      onClick={handleAddWorkout}
-                      style={{
-                        padding: "8px",
-                        borderRadius: "4px",
-                        background: "#22c55e",
-                        color: "white",
-                        border: "none",
-                        cursor: "pointer",
-                        fontSize: "14px",
-                        fontWeight: 600,
-                      }}
-                    >
-                      {editingWorkoutId ? "✓ Update Workout" : "✓ Save Workout"}
-                    </button>
-                  </div>
-                )}
-
-                <div style={{ display: "grid", gap: "8px" }}>
-                  {selectedClient.workouts.map((w) => (
-                    <div
-                      key={w.id}
-                      style={{
-                        background: "#0b1120",
-                        padding: "12px",
-                        borderRadius: "6px",
-                        borderLeft: "3px solid #3b82f6",
-                      }}
-                    >
+                    <div style={{ flex: 1, minWidth: "200px" }}>
+                      <p style={{ fontSize: "16px", fontWeight: 600, marginBottom: "4px" }}>
+                        {client.name}
+                      </p>
+                      <p style={{ fontSize: "13px", color: "#9ca3af", marginBottom: "8px" }}>
+                        {client.email}
+                      </p>
                       <div
                         style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))",
+                          gap: "8px",
+                          fontSize: "12px",
+                          color: "#9ca3af",
                         }}
                       >
                         <div>
-                          <p style={{ fontWeight: 600, fontSize: "14px" }}>
-                            {w.exercise}
-                          </p>
-                          <p style={{ fontSize: "12px", color: "#9ca3af" }}>
-                            {w.sets} sets × {w.reps} reps @ {w.weight}
-                          </p>
+                          <p style={{ color: "#60a5fa" }}>Goal: {client.fitnessGoal}</p>
                         </div>
-
-                        <div style={{ display: "flex", gap: "4px" }}>
-                          <button
-                            onClick={() => handleEditWorkout(w)}
-                            style={{
-                              padding: "4px 8px",
-                              borderRadius: "4px",
-                              background: "#f59e0b",
-                              color: "white",
-                              border: "none",
-                              cursor: "pointer",
-                              fontSize: "12px",
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteWorkout(w.id)}
-                            style={{
-                              padding: "4px 8px",
-                              borderRadius: "4px",
-                              background: "#ef4444",
-                              color: "white",
-                              border: "none",
-                              cursor: "pointer",
-                              fontSize: "12px",
-                            }}
-                          >
-                            Delete
-                          </button>
+                        <div>
+                          <p>Plan: {client.plan}</p>
+                        </div>
+                        <div>
+                          <p>Payment: {new Date(client.paymentDate).toLocaleDateString()}</p>
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
-              </section>
-
-              {/* DIET */}
-              <section>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: "12px",
-                  }}
-                >
-                  <h2 style={{ fontSize: "18px", fontWeight: 600 }}>
-                    🍎 Diet Plan
-                  </h2>
-                  <button
-                    onClick={() => {
-                      setShowDietForm(!showDietForm);
-                      if (editingDietId) {
-                        setEditingDietId(null);
-                        setDietForm({
-                          time: "",
-                          meal: "",
-                          calories: "",
-                        });
-                      }
-                    }}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: "4px",
-                      background: "#3b82f6",
-                      color: "white",
-                      border: "none",
-                      cursor: "pointer",
-                      fontSize: "12px",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {showDietForm ? "✕ Cancel" : "+ Add Meal"}
-                  </button>
-                </div>
-
-                {showDietForm && (
-                  <div
-                    style={{
-                      background: "#0b1120",
-                      padding: "12px",
-                      borderRadius: "6px",
-                      marginBottom: "12px",
-                      display: "grid",
-                      gap: "8px",
-                      borderLeft: "3px solid #3b82f6",
-                    }}
-                  >
-                    <input
-                      type="text"
-                      placeholder="Time (e.g., 7:00 AM)"
-                      value={dietForm.time}
-                      onChange={(e) =>
-                        setDietForm({ ...dietForm, time: e.target.value })
-                      }
-                      style={inputStyle}
-                    />
-                    <input
-                      type="text"
-                      placeholder="Meal (e.g., Chicken + Rice)"
-                      value={dietForm.meal}
-                      onChange={(e) =>
-                        setDietForm({ ...dietForm, meal: e.target.value })
-                      }
-                      style={inputStyle}
-                    />
-                    <input
-                      type="number"
-                      placeholder="Calories"
-                      value={dietForm.calories}
-                      onChange={(e) =>
-                        setDietForm({
-                          ...dietForm,
-                          calories: e.target.value,
-                        })
-                      }
-                      style={inputStyle}
-                    />
                     <button
-                      onClick={handleAddDiet}
+                      onClick={() => handleGeneratePassword(client.id)}
+                      disabled={loadingPassword === client.id}
                       style={{
-                        padding: "8px",
-                        borderRadius: "4px",
-                        background: "#22c55e",
+                        padding: "10px 16px",
+                        borderRadius: "6px",
+                        background:
+                          loadingPassword === client.id ? "#6b7280" : "#22c55e",
                         color: "white",
                         border: "none",
-                        cursor: "pointer",
+                        cursor:
+                          loadingPassword === client.id ? "not-allowed" : "pointer",
                         fontSize: "14px",
                         fontWeight: 600,
+                        whiteSpace: "nowrap",
                       }}
                     >
-                      {editingDietId ? "✓ Update Meal" : "✓ Save Meal"}
+                      {loadingPassword === client.id
+                        ? "Sending..."
+                        : "🔐 Generate & Send"}
                     </button>
                   </div>
-                )}
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-                <div style={{ display: "grid", gap: "8px" }}>
-                  {(selectedClient.diets || []).map((d) => (
+        {/* ALL CLIENTS TAB */}
+        {activeTab === "all" && (
+          <div style={containerStyle}>
+            {/* SIDEBAR */}
+            <div style={{ width: "100%" }}>
+              <h3
+                style={{
+                  marginBottom: "12px",
+                  fontSize: "12px",
+                  color: "#9ca3af",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.5px",
+                }}
+              >
+                Your Clients ({allClients.length})
+              </h3>
+              <div style={{ display: "grid", gap: "8px" }}>
+                {allClients.map((client) => (
+                  <button
+                    key={client.id}
+                    onClick={() => setSelectedClient(client)}
+                    style={{
+                      padding: "12px",
+                      borderRadius: "6px",
+                      background:
+                        selectedClient?.id === client.id ? "#1f2937" : "transparent",
+                      border:
+                        selectedClient?.id === client.id
+                          ? "1px solid #3b82f6"
+                          : "1px solid #1f2937",
+                      color: "white",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      fontSize: "14px",
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    <p style={{ fontWeight: 600, marginBottom: "4px" }}>
+                      {client.name}
+                    </p>
+                    <p style={{ fontSize: "12px", color: "#9ca3af" }}>
+                      {client.plan}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* MAIN CONTENT */}
+            <div style={{ width: "100%" }}>
+              {selectedClient ? (
+                <>
+                  <h2
+                    style={{
+                      fontSize: "20px",
+                      fontWeight: 600,
+                      marginBottom: "16px",
+                    }}
+                  >
+                    {selectedClient.name} - Training Overview
+                  </h2>
+
+                  {/* INFO CARDS */}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns:
+                        "repeat(auto-fit, minmax(150px, 1fr))",
+                      gap: "12px",
+                      marginBottom: "24px",
+                    }}
+                  >
+                    <InfoCard
+                      label="Current Weight"
+                      value={`${selectedClient.currentWeight} kg`}
+                    />
+                    <InfoCard
+                      label="Goal Weight"
+                      value={`${selectedClient.goalWeight} kg`}
+                      highlight
+                    />
+                    <InfoCard
+                      label="Progress"
+                      value={`${selectedClient.progress}%`}
+                      color="#22c55e"
+                    />
+                    <InfoCard
+                      label="Sessions"
+                      value={`${selectedClient.sessionsCompleted}/${selectedClient.sessionsTotal}`}
+                    />
+                  </div>
+
+                  {/* WORKOUTS */}
+                  <section style={{ marginBottom: "24px" }}>
                     <div
-                      key={d.id}
                       style={{
-                        background: "#0b1120",
-                        padding: "12px",
-                        borderRadius: "6px",
                         display: "flex",
                         justifyContent: "space-between",
                         alignItems: "center",
-                        borderLeft: "3px solid #22c55e",
+                        marginBottom: "12px",
+                        flexWrap: "wrap",
+                        gap: "8px",
                       }}
                     >
-                      <div>
-                        <p style={{ fontWeight: 600, fontSize: "14px" }}>
-                          {d.meal}
-                        </p>
-                        <p style={{ fontSize: "12px", color: "#9ca3af" }}>
-                          {d.time}
-                        </p>
-                      </div>
-
-                      <div
+                      <h3 style={{ fontSize: "18px", fontWeight: 600 }}>
+                        💪 Workouts ({selectedClient.workouts.length})
+                      </h3>
+                      <button
+                        onClick={() => setShowWorkoutForm((prev) => !prev)}
                         style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
+                          padding: "6px 12px",
+                          borderRadius: "6px",
+                          border: "none",
+                          background: "#3b82f6",
+                          color: "white",
+                          fontSize: "13px",
+                          cursor: "pointer",
                         }}
                       >
-                        <p
-                          style={{
-                            fontWeight: 600,
-                            color: "#3b82f6",
-                            fontSize: "14px",
-                          }}
-                        >
-                          {d.calories} cal
-                        </p>
+                        {showWorkoutForm ? "Close" : "Add Workout"}
+                      </button>
+                    </div>
+
+                    {showWorkoutForm && (
+                      <div
+                        style={{
+                          background: "#0b1120",
+                          padding: "12px",
+                          borderRadius: "8px",
+                          marginBottom: "12px",
+                          display: "grid",
+                          gap: "8px",
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(100px, 1fr))",
+                        }}
+                      >
+                        <input
+                          placeholder="Exercise"
+                          value={workoutExercise}
+                          onChange={(e) =>
+                            setWorkoutExercise(e.target.value)
+                          }
+                          style={inputStyle}
+                        />
+                        <input
+                          placeholder="Sets"
+                          value={workoutSets}
+                          onChange={(e) => setWorkoutSets(e.target.value)}
+                          style={inputStyle}
+                        />
+                        <input
+                          placeholder="Reps"
+                          value={workoutReps}
+                          onChange={(e) => setWorkoutReps(e.target.value)}
+                          style={inputStyle}
+                        />
+                        <input
+                          placeholder="Weight"
+                          value={workoutWeight}
+                          onChange={(e) =>
+                            setWorkoutWeight(e.target.value)
+                          }
+                          style={inputStyle}
+                        />
                         <button
-                          onClick={() => handleEditDiet(d)}
+                          onClick={handleAddWorkout}
+                          disabled={savingWorkout}
                           style={{
-                            padding: "4px 8px",
-                            borderRadius: "4px",
-                            background: "#f59e0b",
-                            color: "white",
+                            padding: "8px 12px",
+                            borderRadius: "6px",
                             border: "none",
-                            cursor: "pointer",
-                            fontSize: "12px",
+                            background: "#22c55e",
+                            color: "white",
+                            fontSize: "13px",
+                            cursor: savingWorkout
+                              ? "not-allowed"
+                              : "pointer",
                           }}
                         >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteDiet(d.id)}
-                          style={{
-                            padding: "4px 8px",
-                            borderRadius: "4px",
-                            background: "#ef4444",
-                            color: "white",
-                            border: "none",
-                            cursor: "pointer",
-                            fontSize: "12px",
-                          }}
-                        >
-                          Delete
+                          {savingWorkout ? "Saving..." : "Save"}
                         </button>
                       </div>
+                    )}
+
+                    <div style={{ display: "grid", gap: "8px" }}>
+                      {selectedClient.workouts.length === 0 ? (
+                        <p style={{ color: "#9ca3af" }}>
+                          No workouts assigned yet.
+                        </p>
+                      ) : (
+                        selectedClient.workouts.map((w) => (
+                          <div key={w.id}>
+                            {editingWorkoutId === w.id ? (
+                              <div
+                                style={{
+                                  background: "#0b1120",
+                                  padding: "12px",
+                                  borderRadius: "6px",
+                                  borderLeft: "3px solid #f59e0b",
+                                  display: "grid",
+                                  gap: "8px",
+                                  gridTemplateColumns:
+                                    "repeat(auto-fit, minmax(80px, 1fr))",
+                                }}
+                              >
+                                <input
+                                  value={editWorkoutExercise}
+                                  onChange={(e) =>
+                                    setEditWorkoutExercise(e.target.value)
+                                  }
+                                  style={inputStyle}
+                                />
+                                <input
+                                  value={editWorkoutSets}
+                                  onChange={(e) =>
+                                    setEditWorkoutSets(e.target.value)
+                                  }
+                                  style={inputStyle}
+                                />
+                                <input
+                                  value={editWorkoutReps}
+                                  onChange={(e) =>
+                                    setEditWorkoutReps(e.target.value)
+                                  }
+                                  style={inputStyle}
+                                />
+                                <input
+                                  value={editWorkoutWeight}
+                                  onChange={(e) =>
+                                    setEditWorkoutWeight(e.target.value)
+                                  }
+                                  style={inputStyle}
+                                />
+                                <button
+                                  onClick={() => handleEditWorkout(w.id)}
+                                  disabled={savingEditWorkout}
+                                  style={{
+                                    padding: "8px 12px",
+                                    borderRadius: "6px",
+                                    border: "none",
+                                    background: "#22c55e",
+                                    color: "white",
+                                    fontSize: "13px",
+                                    cursor: savingEditWorkout
+                                      ? "not-allowed"
+                                      : "pointer",
+                                  }}
+                                >
+                                  {savingEditWorkout ? "Saving..." : "Save"}
+                                </button>
+                                <button
+                                  onClick={() => setEditingWorkoutId(null)}
+                                  style={{
+                                    padding: "8px 12px",
+                                    borderRadius: "6px",
+                                    border: "none",
+                                    background: "#6b7280",
+                                    color: "white",
+                                    fontSize: "13px",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <div
+                                style={{
+                                  background: "#0b1120",
+                                  padding: "12px",
+                                  borderRadius: "6px",
+                                  borderLeft: "3px solid #3b82f6",
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  flexWrap: "wrap",
+                                  gap: "8px",
+                                }}
+                              >
+                                <div>
+                                  <p style={{ fontWeight: 600, fontSize: "14px" }}>
+                                    {w.exercise}
+                                  </p>
+                                  <p
+                                    style={{
+                                      fontSize: "12px",
+                                      color: "#9ca3af",
+                                    }}
+                                  >
+                                    {w.sets} sets × {w.reps} reps @ {w.weight}
+                                  </p>
+                                </div>
+                                <div style={{ display: "flex", gap: "6px" }}>
+                                  <button
+                                    onClick={() => {
+                                      setEditingWorkoutId(w.id);
+                                      setEditWorkoutExercise(w.exercise);
+                                      setEditWorkoutSets(w.sets);
+                                      setEditWorkoutReps(w.reps);
+                                      setEditWorkoutWeight(w.weight);
+                                    }}
+                                    style={{
+                                      padding: "4px 8px",
+                                      borderRadius: "4px",
+                                      border: "none",
+                                      background: "#f59e0b",
+                                      color: "white",
+                                      fontSize: "12px",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteWorkout(w.id)}
+                                    style={{
+                                      padding: "4px 8px",
+                                      borderRadius: "4px",
+                                      border: "none",
+                                      background: "#ef4444",
+                                      color: "white",
+                                      fontSize: "12px",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
                     </div>
-                  ))}
+                  </section>
+
+                  {/* DIET */}
+                  <section>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "12px",
+                        flexWrap: "wrap",
+                        gap: "8px",
+                      }}
+                    >
+                      <h3 style={{ fontSize: "18px", fontWeight: 600 }}>
+                        🍎 Diet Plan ({selectedClient.diets.length})
+                      </h3>
+                      <button
+                        onClick={() => setShowDietForm((prev) => !prev)}
+                        style={{
+                          padding: "6px 12px",
+                          borderRadius: "6px",
+                          border: "none",
+                          background: "#22c55e",
+                          color: "white",
+                          fontSize: "13px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {showDietForm ? "Close" : "Add Diet Item"}
+                      </button>
+                    </div>
+
+                    {showDietForm && (
+                      <div
+                        style={{
+                          background: "#0b1120",
+                          padding: "12px",
+                          borderRadius: "8px",
+                          marginBottom: "12px",
+                          display: "grid",
+                          gap: "8px",
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(100px, 1fr))",
+                        }}
+                      >
+                        <input
+                          placeholder="Time (e.g. 9:00 AM)"
+                          value={dietTime}
+                          onChange={(e) => setDietTime(e.target.value)}
+                          style={inputStyle}
+                        />
+                        <input
+                          placeholder="Meal (e.g. Oats, Eggs)"
+                          value={dietMeal}
+                          onChange={(e) => setDietMeal(e.target.value)}
+                          style={inputStyle}
+                        />
+                        <input
+                          placeholder="Calories"
+                          value={dietCalories}
+                          onChange={(e) =>
+                            setDietCalories(e.target.value)
+                          }
+                          style={inputStyle}
+                        />
+                        <button
+                          onClick={handleAddDiet}
+                          disabled={savingDiet}
+                          style={{
+                            padding: "8px 12px",
+                            borderRadius: "6px",
+                            border: "none",
+                            background: "#3b82f6",
+                            color: "white",
+                            fontSize: "13px",
+                            cursor: savingDiet
+                              ? "not-allowed"
+                              : "pointer",
+                          }}
+                        >
+                          {savingDiet ? "Saving..." : "Save"}
+                        </button>
+                      </div>
+                    )}
+
+                    <div style={{ display: "grid", gap: "8px" }}>
+                      {selectedClient.diets.length === 0 ? (
+                        <p style={{ color: "#9ca3af" }}>
+                          No diet plan assigned yet.
+                        </p>
+                      ) : (
+                        selectedClient.diets.map((d) => (
+                          <div key={d.id}>
+                            {editingDietId === d.id ? (
+                              <div
+                                style={{
+                                  background: "#0b1120",
+                                  padding: "12px",
+                                  borderRadius: "6px",
+                                  borderLeft: "3px solid #f59e0b",
+                                  display: "grid",
+                                  gap: "8px",
+                                  gridTemplateColumns:
+                                    "repeat(auto-fit, minmax(80px, 1fr))",
+                                }}
+                              >
+                                <input
+                                  value={editDietTime}
+                                  onChange={(e) =>
+                                    setEditDietTime(e.target.value)
+                                  }
+                                  style={inputStyle}
+                                />
+                                <input
+                                  value={editDietMeal}
+                                  onChange={(e) =>
+                                    setEditDietMeal(e.target.value)
+                                  }
+                                  style={inputStyle}
+                                />
+                                <input
+                                  value={editDietCalories}
+                                  onChange={(e) =>
+                                    setEditDietCalories(e.target.value)
+                                  }
+                                  style={inputStyle}
+                                />
+                                <button
+                                  onClick={() => handleEditDiet(d.id)}
+                                  disabled={savingEditDiet}
+                                  style={{
+                                    padding: "8px 12px",
+                                    borderRadius: "6px",
+                                    border: "none",
+                                    background: "#22c55e",
+                                    color: "white",
+                                    fontSize: "13px",
+                                    cursor: savingEditDiet
+                                      ? "not-allowed"
+                                      : "pointer",
+                                  }}
+                                >
+                                  {savingEditDiet ? "Saving..." : "Save"}
+                                </button>
+                                <button
+                                  onClick={() => setEditingDietId(null)}
+                                  style={{
+                                    padding: "8px 12px",
+                                    borderRadius: "6px",
+                                    border: "none",
+                                    background: "#6b7280",
+                                    color: "white",
+                                    fontSize: "13px",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            ) : (
+                              <div
+                                style={{
+                                  background: "#0b1120",
+                                  padding: "12px",
+                                  borderRadius: "6px",
+                                  borderLeft: "3px solid #22c55e",
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  flexWrap: "wrap",
+                                  gap: "8px",
+                                }}
+                              >
+                                <div>
+                                  <p style={{ fontWeight: 600, fontSize: "14px" }}>
+                                    {d.meal}
+                                  </p>
+                                  <p style={{ fontSize: "12px", color: "#9ca3af" }}>
+                                    {d.time}
+                                  </p>
+                                </div>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    gap: "8px",
+                                    alignItems: "center",
+                                  }}
+                                >
+                                  <p
+                                    style={{
+                                      fontWeight: 600,
+                                      color: "#3b82f6",
+                                      fontSize: "14px",
+                                      margin: 0,
+                                    }}
+                                  >
+                                    {d.calories} cal
+                                  </p>
+                                  <div style={{ display: "flex", gap: "6px" }}>
+                                    <button
+                                      onClick={() => {
+                                        setEditingDietId(d.id);
+                                        setEditDietTime(d.time);
+                                        setEditDietMeal(d.meal);
+                                        setEditDietCalories(String(d.calories));
+                                      }}
+                                      style={{
+                                        padding: "4px 8px",
+                                        borderRadius: "4px",
+                                        border: "none",
+                                        background: "#f59e0b",
+                                        color: "white",
+                                        fontSize: "12px",
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteDiet(d.id)}
+                                      style={{
+                                        padding: "4px 8px",
+                                        borderRadius: "4px",
+                                        border: "none",
+                                        background: "#ef4444",
+                                        color: "white",
+                                        fontSize: "12px",
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </section>
+                </>
+              ) : (
+                <div style={{ textAlign: "center", paddingTop: "40px" }}>
+                  <p style={{ color: "#9ca3af" }}>
+                    Select a client to view details
+                  </p>
                 </div>
-              </section>
-            </>
-          ) : (
-            <div style={{ textAlign: "center", paddingTop: "40px" }}>
-              <p style={{ color: "#9ca3af" }}>Loading clients...</p>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 const inputStyle: React.CSSProperties = {
-  padding: "8px",
-  borderRadius: "4px",
+  padding: "8px 10px",
+  borderRadius: "6px",
   border: "1px solid #1f2937",
-  background: "#1f2937",
+  background: "#020617",
   color: "white",
-  fontSize: "14px",
-  boxSizing: "border-box",
+  fontSize: "13px",
 };
 
 function InfoCard(props: {

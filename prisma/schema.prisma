@@ -26,41 +26,43 @@ model Client {
   id                String    @id @default(auto()) @map("_id") @db.ObjectId
   name              String
   email             String    @unique
-  password          String?   // ✅ NEW: Null until payment verified
+  password          String?
+  passwordGeneratedAt DateTime?
+  passwordExpiresAt   DateTime?
   currentWeight     Float
   goalWeight        Float
   plan              String
   progress          Int
   sessionsCompleted Int
   sessionsTotal     Int
-  
-  // ✅ NEW: Payment & Subscription Status
-  paymentStatus     String    @default("pending") // "pending" | "completed" | "failed" | "expired"
-  subscriptionDate  DateTime? // When payment was verified
-  subscriptionEndDate DateTime? // Auto-expire after 30/60/90 days
-  planDuration      Int       @default(30) // Days (30, 60, 90)
-  planAmount        Int       @default(0) // Amount paid in paise (e.g., 5000 = ₹50)
-  
-  // ✅ NEW: Track if credentials were sent
+
+  paymentStatus     String    @default("pending")
+  subscriptionDate  DateTime?
+  subscriptionEndDate DateTime?
+  planDuration      Int       @default(30)
+  planAmount        Int       @default(0)
   credentialsSent   Boolean   @default(false)
-  
+
   workouts          Workout[]
   diets             Diet[]
+  checklist         Json?  // 👈 ADD THIS
+
   trainerId         String    @db.ObjectId
   trainer           Trainer   @relation(fields: [trainerId], references: [id], onDelete: Cascade)
   payment           Payment?  @relation(fields: [paymentId], references: [id])
   paymentId         String?   @db.ObjectId
-  
+
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
   checklistItems    ChecklistItem[]
 }
 
+
 model Payment {
   id              String   @id @default(auto()) @map("_id") @db.ObjectId
   razorpayOrderId String   @unique
-  razorpayPaymentId String? @unique // Filled after payment
+  razorpayPaymentId String? // Filled after payment
   razorpaySignature String? // For verification
   
   amount          Int      // Amount in paise (e.g., 5000 = ₹50)

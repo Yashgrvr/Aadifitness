@@ -3,6 +3,9 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+// Aadi / default trainer ka ID yahan daalo (Prisma Studio se copy)
+const DEFAULT_TRAINER_ID = "693177322d42beddadbf04e4";
+
 function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
@@ -11,9 +14,14 @@ function isValidEmail(email: string): boolean {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { clientId, email, currentWeight, goalWeight, fitnessGoal } = body;
+    const {
+      clientId,
+      email,
+      currentWeight,
+      goalWeight,
+      fitnessGoal,
+    } = body;
 
-    // required checks
     if (
       !email ||
       currentWeight === undefined ||
@@ -49,12 +57,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const validGoals = [
-      "weight_loss",
-      "muscle_gain",
-      "maintenance",
-      "strength",
-    ];
+    const validGoals = ["weight_loss", "muscle_gain", "maintenance", "strength"];
     if (!validGoals.includes(fitnessGoal)) {
       return NextResponse.json(
         { success: false, message: "Invalid fitness goal" },
@@ -62,7 +65,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ensure email is unique for some other client
     const existingByEmail = await prisma.client.findFirst({
       where: {
         email,
@@ -76,7 +78,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // if clientId provided and exists => update
     let client = clientId
       ? await prisma.client.findUnique({ where: { id: clientId } })
       : null;
@@ -88,22 +89,17 @@ export async function POST(req: NextRequest) {
           email,
           currentWeight: cw,
           goalWeight: gw,
-          // map fitnessGoal from prompt into your structure:
-          // for now just store in plan or leave as is (we'll wire later)
-          // you don't have a fitnessGoal field, so we just keep weights now.
         },
       });
     } else {
-      // create new client with DEFAULTS for all required fields in your schema
       client = await prisma.client.create({
         data: {
-          // required fields
-          name: "New Client", // can be updated later
+          name: "New Client",
           email,
           password: null,
           currentWeight: cw,
           goalWeight: gw,
-          plan: "onboarding", // placeholder; your real plan/payment later
+          plan: "onboarding",
           progress: 0,
           sessionsCompleted: 0,
           sessionsTotal: 0,
@@ -111,7 +107,10 @@ export async function POST(req: NextRequest) {
           planDuration: 30,
           planAmount: 0,
           credentialsSent: false,
-          // relations: for now no trainer / payment linked
+          // yahan required relation satisfy karo
+          trainer: {
+            connect: { id: DEFAULT_TRAINER_ID },
+          },
         },
       });
     }

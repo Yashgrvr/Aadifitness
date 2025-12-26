@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
-export const dynamic = 'force-dynamic';
 
+export const dynamic = "force-dynamic";
 
 const prisma = new PrismaClient();
 
-// Add workout
 export async function POST(req: NextRequest) {
   try {
     const { clientId, exercise, sets, reps, weight } = await req.json();
@@ -27,48 +26,9 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const client = await prisma.client.findUnique({
-      where: { id: clientId },
-      include: {
-        workouts: true,
-        diets: true,
-      },
-    });
-
-    return NextResponse.json({ client, workout });
+    return NextResponse.json({ workout });
   } catch (err) {
-    console.error("POST /api/clients/workout error:", err);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
-  }
-}
-
-// Delete workout
-export async function DELETE(req: NextRequest) {
-  try {
-    const { clientId, id } = await req.json();
-
-    if (!clientId || !id) {
-      return NextResponse.json(
-        { error: "clientId and id are required" },
-        { status: 400 }
-      );
-    }
-
-    await prisma.workout.delete({
-      where: { id },
-    });
-
-    const client = await prisma.client.findUnique({
-      where: { id: clientId },
-      include: {
-        workouts: true,
-        diets: true,
-      },
-    });
-
-    return NextResponse.json({ client });
-  } catch (err) {
-    console.error("DELETE /api/clients/workout error:", err);
+    console.error("POST /api/workouts error:", err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }
 }

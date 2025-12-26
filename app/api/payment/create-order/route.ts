@@ -4,8 +4,11 @@ import Razorpay from "razorpay";
 
 const prisma = new PrismaClient();
 
+// TODO: yahan Aadi trainer ka actual ObjectId daalo
+const DEFAULT_TRAINER_ID = "693177322d42beddadbf04e4";
+
 const planAmounts: Record<string, number> = {
-  "1_month": 99900,
+  "1_month": 100,
   "3_months": 249900,
   "6_months": 449900,
 };
@@ -49,17 +52,20 @@ export async function POST(req: NextRequest) {
       key_secret: process.env.RAZORPAY_KEY_SECRET || "",
     });
 
+    // receipt must be <= 40 chars
+    const shortClientId = String(clientId).slice(-6);
+    const shortTime = Date.now().toString().slice(-6);
+
     const order = await razorpay.orders.create({
       amount,
       currency: "INR",
-      receipt: `client_${clientId}_${Date.now()}`,
+      receipt: `c_${shortClientId}_${shortTime}`,
       notes: {
         clientId,
         plan,
       },
     });
 
-    // OPTIONAL: you already have Payment model; keep log minimal for now
     await prisma.payment.create({
       data: {
         razorpayOrderId: order.id,
@@ -69,7 +75,7 @@ export async function POST(req: NextRequest) {
         clientEmail: client.email,
         clientName: client.name,
         planDuration: plan === "1_month" ? 30 : plan === "3_months" ? 90 : 180,
-        trainerId: client.trainerId ?? "", // if you don’t have trainer yet, use dummy and adjust later
+        trainerId: client.trainerId || DEFAULT_TRAINER_ID,
       },
     });
 
