@@ -105,6 +105,8 @@ export default function ClientOnboarding() {
         body: JSON.stringify({
           clientId,
           email,
+          firstName,
+          lastName,
           currentWeight: parseFloat(currentWeight),
           goalWeight: parseFloat(goalWeight),
           fitnessGoal,

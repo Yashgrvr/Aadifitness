@@ -30,7 +30,7 @@ export async function sendPasswordEmail(
         <body>
           <div class="container">
             <div class="header">
-              <h1>Welcome to Aadi Fitness! 🏋️</h1>
+              <h1>Welcome to Fitvibs! 🏋️</h1>
             </div>
             <div class="content">
               <p>Hi ${firstName},</p>
@@ -44,7 +44,7 @@ export async function sendPasswordEmail(
               
               <p><strong>Important:</strong> Please change this password after your first login for security.</p>
               
-              <p>You can now log in at: <a href="${process.env.NEXT_PUBLIC_APP_URL}/client/login">Aadi Fitness Login</a></p>
+              <p>You can now log in at: <a href="{fitvibs.com}/client/login">Aadi Fitness Login</a></p>
               
               <p>If you have any questions, feel free to reach out to your trainer.</p>
               
@@ -61,7 +61,7 @@ export async function sendPasswordEmail(
     await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: email,
-      subject: "Your Aadi Fitness Login Password",
+      subject: "Your FitVibs Login Password",
       html: htmlContent,
     });
 

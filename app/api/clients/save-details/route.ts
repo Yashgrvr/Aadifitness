@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
-
-// Aadi / default trainer ka ID yahan daalo (Prisma Studio se copy)
 const DEFAULT_TRAINER_ID = "693177322d42beddadbf04e4";
 
 function isValidEmail(email: string): boolean {
@@ -20,6 +18,8 @@ export async function POST(req: NextRequest) {
       currentWeight,
       goalWeight,
       fitnessGoal,
+      firstName,
+      lastName,
     } = body;
 
     if (
@@ -65,12 +65,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // ---- EMAIL DUPLICATE CHECK ----
+    // clientId ko clean karo (null/undefined/"" sabko null treat)
+    const cleanClientId =
+      typeof clientId === "string" && clientId.trim().length > 0
+        ? clientId.trim()
+        : null;
+
     const existingByEmail = await prisma.client.findFirst({
-      where: {
-        email,
-        ...(clientId ? { id: { not: clientId } } : {}),
-      },
+      where: cleanClientId
+        ? {
+            email,
+            // same email allowed ONLY for same client
+            id: { not: cleanClientId },
+          }
+        : { email },
     });
+
     if (existingByEmail) {
       return NextResponse.json(
         { success: false, message: "Email already in use" },
@@ -78,27 +89,35 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let client = clientId
-      ? await prisma.client.findUnique({ where: { id: clientId } })
+    // ---- CREATE or UPDATE CLIENT ----
+    let client = cleanClientId
+      ? await prisma.client.findUnique({ where: { id: cleanClientId } })
       : null;
+
+    const fullName =
+      [firstName, lastName].filter((x) => x && x.trim().length > 0).join(" ") ||
+      "New Client";
 
     if (client) {
       client = await prisma.client.update({
         where: { id: client.id },
         data: {
+          name: fullName,
           email,
           currentWeight: cw,
           goalWeight: gw,
+          fitnessGoal,
         },
       });
     } else {
       client = await prisma.client.create({
         data: {
-          name: "New Client",
+          name: fullName,
           email,
           password: null,
           currentWeight: cw,
           goalWeight: gw,
+          fitnessGoal,
           plan: "onboarding",
           progress: 0,
           sessionsCompleted: 0,
@@ -107,7 +126,6 @@ export async function POST(req: NextRequest) {
           planDuration: 30,
           planAmount: 0,
           credentialsSent: false,
-          // yahan required relation satisfy karo
           trainer: {
             connect: { id: DEFAULT_TRAINER_ID },
           },
