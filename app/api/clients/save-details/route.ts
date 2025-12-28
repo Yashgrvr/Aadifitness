@@ -17,7 +17,6 @@ export async function POST(req: NextRequest) {
       email,
       currentWeight,
       goalWeight,
-      fitnessGoal,
       firstName,
       lastName,
     } = body;
@@ -26,8 +25,7 @@ export async function POST(req: NextRequest) {
       !email ||
       currentWeight === undefined ||
       goalWeight === undefined ||
-      !fitnessGoal
-    ) {
+      !body.fitnessGoal    ) {
       return NextResponse.json(
         { success: false, message: "All fields are required" },
         { status: 400 }
@@ -58,7 +56,7 @@ export async function POST(req: NextRequest) {
     }
 
     const validGoals = ["weight_loss", "muscle_gain", "maintenance", "strength"];
-    if (!validGoals.includes(fitnessGoal)) {
+    if (!validGoals.includes(body.fitnessGoal)) {
       return NextResponse.json(
         { success: false, message: "Invalid fitness goal" },
         { status: 400 }
@@ -106,7 +104,6 @@ export async function POST(req: NextRequest) {
           email,
           currentWeight: cw,
           goalWeight: gw,
-          fitnessGoal,
         },
       });
     } else {
@@ -117,7 +114,6 @@ export async function POST(req: NextRequest) {
           password: null,
           currentWeight: cw,
           goalWeight: gw,
-          fitnessGoal,
           plan: "onboarding",
           progress: 0,
           sessionsCompleted: 0,
