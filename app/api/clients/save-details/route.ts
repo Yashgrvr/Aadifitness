@@ -19,13 +19,11 @@ export async function POST(req: NextRequest) {
       goalWeight,
       firstName,
       lastName,
+      fitnessGoal,
     } = body;
 
-    if (
-      !email ||
-      currentWeight === undefined ||
-      goalWeight === undefined ||
-      !body.fitnessGoal    ) {
+    // 1. Basic Validation
+    if (!email || currentWeight === undefined || goalWeight === undefined || !fitnessGoal) {
       return NextResponse.json(
         { success: false, message: "All fields are required" },
         { status: 400 }
@@ -41,14 +39,7 @@ export async function POST(req: NextRequest) {
 
     const cw = Number(currentWeight);
     const gw = Number(goalWeight);
-    if (
-      Number.isNaN(cw) ||
-      Number.isNaN(gw) ||
-      cw < 1 ||
-      cw > 300 ||
-      gw < 1 ||
-      gw > 300
-    ) {
+    if (Number.isNaN(cw) || Number.isNaN(gw) || cw < 1 || cw > 300 || gw < 1 || gw > 300) {
       return NextResponse.json(
         { success: false, message: "Weights must be between 1 and 300 kg" },
         { status: 400 }
@@ -56,25 +47,22 @@ export async function POST(req: NextRequest) {
     }
 
     const validGoals = ["weight_loss", "muscle_gain", "maintenance", "strength"];
-    if (!validGoals.includes(body.fitnessGoal)) {
+    if (!validGoals.includes(fitnessGoal)) {
       return NextResponse.json(
         { success: false, message: "Invalid fitness goal" },
         { status: 400 }
       );
     }
 
-    // ---- EMAIL DUPLICATE CHECK ----
-    // clientId ko clean karo (null/undefined/"" sabko null treat)
-   // ---- UPDATED EMAIL DUPLICATE CHECK ----
-    const cleanClientId =
-      typeof clientId === "string" && clientId.trim().length > 0
-        ? clientId.trim()
-        : null;
+    // 2. Updated Email Duplicate Check
+    const cleanClientId = typeof clientId === "string" && clientId.trim().length > 0
+      ? clientId.trim()
+      : null;
 
     const existingByEmail = await prisma.client.findFirst({
       where: {
         email: email,
-        // Agar cleanClientId hai, toh us ID ko chhod kar baaki database mein check karein
+        // Agar current client update kar raha hai toh use ignore karein
         NOT: cleanClientId ? { id: cleanClientId } : undefined,
       },
     });
@@ -85,27 +73,25 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       );
     }
-    
-    // ---- CREATE or UPDATE CLIENT ----
-    let client = cleanClientId
-      ? await prisma.client.findUnique({ where: { id: cleanClientId } })
-      : null;
 
-    const fullName =
-      [firstName, lastName].filter((x) => x && x.trim().length > 0).join(" ") ||
-      "New Client";
+    // 3. Create or Update Client
+    let client;
+    const fullName = [firstName, lastName].filter((x) => x && x.trim().length > 0).join(" ") || "New Client";
 
-    if (client) {
+    if (cleanClientId) {
+      // Update existing client
       client = await prisma.client.update({
-        where: { id: client.id },
+        where: { id: cleanClientId },
         data: {
           name: fullName,
           email,
           currentWeight: cw,
           goalWeight: gw,
+          fitnessGoal: fitnessGoal as any,
         },
       });
     } else {
+      // Create new client
       client = await prisma.client.create({
         data: {
           name: fullName,
@@ -113,6 +99,7 @@ export async function POST(req: NextRequest) {
           password: null,
           currentWeight: cw,
           goalWeight: gw,
+          fitnessGoal: fitnessGoal as any,
           plan: "onboarding",
           progress: 0,
           sessionsCompleted: 0,

@@ -93,21 +93,20 @@ export default function ClientOnboarding() {
     }
   };
 
+  // UPDATED: Fetches fresh ID from localStorage to avoid "Email already in use" error
   const handleGoalsAndPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
     try {
-      // YAHAN BADLAV HAI: 
-      // Variable 'clientId' ki jagah seedha localStorage se fresh ID uthayein
-      const freshClientId = localStorage.getItem("clientId");
+      const currentClientId = localStorage.getItem("clientId");
 
       const response = await fetch("/api/clients/save-details", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId: freshClientId, // Ab API ko sahi ID milegi
+          clientId: currentClientId, 
           email,
           firstName,
           lastName,
@@ -131,17 +130,20 @@ export default function ClientOnboarding() {
     }
   };
 
+  // UPDATED: Fetches fresh ID from localStorage for Razorpay order creation
   const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setPaymentProcessing(true);
 
     try {
+      const currentClientId = localStorage.getItem("clientId");
+
       const orderResponse = await fetch("/api/payment/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId,
+          clientId: currentClientId,
           plan,
           amount: planAmounts[plan],
         }),
@@ -171,7 +173,7 @@ export default function ClientOnboarding() {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                clientId,
+                clientId: currentClientId,
                 orderId: response.razorpay_order_id,
                 paymentId: response.razorpay_payment_id,
                 signature: response.razorpay_signature,
@@ -222,7 +224,7 @@ export default function ClientOnboarding() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-black">
-      {/* Background animated gradient */}
+      {/* Background and Form UI remains exactly as you had it */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob" />
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000" />
@@ -248,7 +250,6 @@ export default function ClientOnboarding() {
 
         {!success && (
           <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-black rounded-2xl shadow-2xl overflow-hidden border border-blue-500/20 backdrop-blur-sm">
-            {/* Header */}
             <div className="bg-gradient-to-r from-blue-600 to-cyan-500 p-8 relative overflow-hidden">
               <div className="absolute inset-0 opacity-10">
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-transparent" />
@@ -263,7 +264,6 @@ export default function ClientOnboarding() {
               </div>
             </div>
 
-            {/* Progress Bar */}
             <div className="px-8 py-6 border-b border-blue-500/10">
               <div className="flex justify-between mb-3">
                 <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
@@ -278,16 +278,13 @@ export default function ClientOnboarding() {
               </div>
             </div>
 
-            {/* Error */}
             {error && (
               <div className="mx-8 mt-6 p-4 bg-red-950/50 border border-red-500/50 text-red-300 rounded-xl text-sm backdrop-blur-sm">
                 ⚠️ {error}
               </div>
             )}
 
-            {/* Form */}
             <form className="px-8 py-8 space-y-6">
-              {/* STEP 1 */}
               {step === 1 && (
                 <div className="space-y-6 animate-fadeIn">
                   <h2 className="text-2xl font-bold text-white mb-8">
@@ -375,7 +372,6 @@ export default function ClientOnboarding() {
                 </div>
               )}
 
-              {/* STEP 2 */}
               {step === 2 && (
                 <div className="space-y-6 animate-fadeIn">
                   <h2 className="text-2xl font-bold text-white mb-8">
@@ -457,7 +453,6 @@ export default function ClientOnboarding() {
                 </div>
               )}
 
-              {/* STEP 3 */}
               {step === 3 && (
                 <div className="space-y-6 animate-fadeIn">
                   <h2 className="text-2xl font-bold text-white mb-8">
