@@ -65,19 +65,18 @@ export async function POST(req: NextRequest) {
 
     // ---- EMAIL DUPLICATE CHECK ----
     // clientId ko clean karo (null/undefined/"" sabko null treat)
+   // ---- UPDATED EMAIL DUPLICATE CHECK ----
     const cleanClientId =
       typeof clientId === "string" && clientId.trim().length > 0
         ? clientId.trim()
         : null;
 
     const existingByEmail = await prisma.client.findFirst({
-      where: cleanClientId
-        ? {
-            email,
-            // same email allowed ONLY for same client
-            id: { not: cleanClientId },
-          }
-        : { email },
+      where: {
+        email: email,
+        // Agar cleanClientId hai, toh us ID ko chhod kar baaki database mein check karein
+        NOT: cleanClientId ? { id: cleanClientId } : undefined,
+      },
     });
 
     if (existingByEmail) {
@@ -86,7 +85,7 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       );
     }
-
+    
     // ---- CREATE or UPDATE CLIENT ----
     let client = cleanClientId
       ? await prisma.client.findUnique({ where: { id: cleanClientId } })

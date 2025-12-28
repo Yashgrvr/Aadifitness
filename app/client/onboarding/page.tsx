@@ -99,11 +99,15 @@ export default function ClientOnboarding() {
     setLoading(true);
 
     try {
+      // YAHAN BADLAV HAI: 
+      // Variable 'clientId' ki jagah seedha localStorage se fresh ID uthayein
+      const freshClientId = localStorage.getItem("clientId");
+
       const response = await fetch("/api/clients/save-details", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId,
+          clientId: freshClientId, // Ab API ko sahi ID milegi
           email,
           firstName,
           lastName,
