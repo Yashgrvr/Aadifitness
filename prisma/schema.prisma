@@ -30,70 +30,72 @@ enum FitnessGoal {
 }
 
 model Client {
-  id                String    @id @default(auto()) @map("_id") @db.ObjectId
-  name              String
-  email             String    @unique
-  password          String?
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  name                String
+  email               String    @unique
+  password            String?
   passwordGeneratedAt DateTime?
   passwordExpiresAt   DateTime?
-  currentWeight     Float
-  goalWeight        Float
-  fitnessGoal       FitnessGoal?   // 👈 add this (optional)
-  plan              String
-  progress          Int
-  sessionsCompleted Int
-  sessionsTotal     Int
-  paymentStatus     String    @default("pending")
-  subscriptionDate  DateTime?
+  currentWeight       Float
+  goalWeight          Float
+  fitnessGoal         FitnessGoal?
+  plan                String
+  progress            Int
+  sessionsCompleted   Int
+  sessionsTotal       Int
+  paymentStatus       String    @default("pending")
+  subscriptionDate    DateTime?
   subscriptionEndDate DateTime?
-  planDuration      Int       @default(30)
-  planAmount        Int       @default(0)
-  credentialsSent   Boolean   @default(false)
-  workouts          Workout[]
-  diets             Diet[]
-  checklist         Json?
-  trainerId         String    @db.ObjectId
-  trainer           Trainer   @relation(fields: [trainerId], references: [id], onDelete: Cascade)
-  payment           Payment?  @relation(fields: [paymentId], references: [id])
-  paymentId         String?   @db.ObjectId
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-  checklistItems    ChecklistItem[]
+  planDuration        Int       @default(30)
+  planAmount          Int       @default(0)
+  credentialsSent     Boolean   @default(false)
+  workouts            Workout[]
+  diets               Diet[]
+  checklist           Json?
+  trainerId           String    @db.ObjectId
+  trainer             Trainer   @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  payment             Payment?  @relation(fields: [paymentId], references: [id])
+  paymentId           String?   @db.ObjectId
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  checklistItems      ChecklistItem[]
 }
-
-
 
 model Payment {
-  id              String   @id @default(auto()) @map("_id") @db.ObjectId
-  razorpayOrderId String   @unique
-  razorpayPaymentId String? // Filled after payment
-  razorpaySignature String? // For verification
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  razorpayOrderId   String   @unique
+  razorpayPaymentId String? 
+  razorpaySignature String? 
   
-  amount          Int      // Amount in paise (e.g., 5000 = ₹50)
-  currency        String   @default("INR")
-  status          String   @default("pending") // "pending" | "completed" | "failed"
-  clientEmail     String
-  clientName      String
+  amount            Int      
+  currency          String   @default("INR")
+  status            String   @default("pending") 
+  clientEmail       String
+  clientName        String
   
-  // ✅ NEW: Plan details
-  planDuration    Int      @default(30) // 30, 60, 90 days
-  notes           String?
+  planDuration      Int      @default(30) 
+  notes             String?
 
-  trainerId       String   @db.ObjectId
-  trainer         Trainer  @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  trainerId         String   @db.ObjectId
+  trainer           Trainer  @relation(fields: [trainerId], references: [id], onDelete: Cascade)
   
-  clients         Client[]
+  clients           Client[]
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
+// ⬇️ WORKOUT MODEL UPDATED HERE ⬇️
 model Workout {
   id       String @id @default(auto()) @map("_id") @db.ObjectId
   exercise String
   sets     String
   reps     String
-  weight   String
+  weight   String? // Isse optional rakha hai bodyweight exercises ke liye
+
+  // ✅ Nayi fields jo humne add ki hain:
+  gifUrl   String? // Cloudinary GIF link ke liye
+  day      String? // Monday, Tuesday, etc. save karne ke liye
 
   clientId String @db.ObjectId
   client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -116,7 +118,7 @@ model Diet {
 model ChecklistItem {
   id        String  @id @default(auto()) @map("_id") @db.ObjectId
   date      String
-  type      String  @default("workout") // "workout" | "diet"
+  type      String  @default("workout") 
   itemId    String
   completed Boolean @default(false)
 
