@@ -53,7 +53,13 @@ export default function TrainerDashboard() {
     if (res.ok) { 
       const data = await res.json(); 
       setAllClients(data.clients || []); 
-      if (data.clients?.length && !selectedClient) setSelectedClient(data.clients[0]); 
+      // ✅ FIXED: Refresh selected client diets
+      if (data.clients?.length && selectedClient) {
+        const updatedClient = data.clients.find((c: any) => c.id === selectedClient.id);
+        if (updatedClient) setSelectedClient(updatedClient);
+      } else if (data.clients?.length && !selectedClient) {
+        setSelectedClient(data.clients[0]);
+      }
     }
   };
 
@@ -70,7 +76,7 @@ export default function TrainerDashboard() {
           exercise: w.exercise, 
           sets: w.sets, 
           reps: w.reps, 
-          weight: w.weight || "0",  // ✅ Ensure weight exists
+          weight: w.weight || "0",
           gifUrl: w.gifUrl 
         }); 
       });
@@ -98,19 +104,44 @@ export default function TrainerDashboard() {
     setIsBulkSaving(false);
   };
 
+  // ✅ FIXED: Multiple Diets Working!
   const handleAddDiet = async () => {
-    if (!selectedClient) return;
-    setSavingDiet(true);
-    const res = await fetch("/api/clients/diet", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clientId: selectedClient.id, time: dietTime, meal: dietMeal, calories: parseInt(dietCalories) }),
-    });
-    if (res.ok) { 
-      fetchAllClients(trainerId);
-      setShowDietForm(false);
-      setDietTime(""); setDietMeal(""); setDietCalories("");
+    if (!selectedClient || !dietTime || !dietMeal || !dietCalories) {
+      alert("Fill all fields! ⚠️");
+      return;
     }
-    setSavingDiet(false);
+
+    setSavingDiet(true);
+    try {
+      const res = await fetch("/api/clients/diet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          clientId: selectedClient.id, 
+          time: dietTime, 
+          meal: dietMeal, 
+          calories: parseInt(dietCalories) 
+        }),
+      });
+      
+      if (res.ok) {
+        // ✅ RELOAD CLIENT DATA with new diets
+        await fetchAllClients(trainerId);
+        setShowDietForm(false);
+        setDietTime(""); 
+        setDietMeal(""); 
+        setDietCalories("");
+        alert("✅ Diet added successfully!");
+      } else {
+        const errorData = await res.json();
+        alert(`❌ Failed: ${errorData.error || "Server error"}`);
+      }
+    } catch (error) {
+      console.error("Diet add error:", error);
+      alert("❌ Network error!");
+    } finally {
+      setSavingDiet(false);
+    }
   };
 
   const handleGifUpload = async (e: any, index: number) => {
@@ -135,7 +166,7 @@ export default function TrainerDashboard() {
   return (
     <div style={{ minHeight: "100vh", background: "#020617", color: "white" }}>
       <header style={headerStyle}>
-        <h1>Aadi Fitness Trainer 👋</h1>
+        <h1>FitVibs Trainer 👋</h1>
         <button onClick={() => { localStorage.clear(); window.location.href = "/login"; }} style={btnSecondary}>Logout</button>
       </header>
 
@@ -146,14 +177,14 @@ export default function TrainerDashboard() {
         </div>
 
         {activeTab === "pending" && (
-           <div style={{ display: "grid", gap: "10px" }}>
-             {pendingClients.map(c => (
-               <div key={c.id} style={pendingCard}>
-                 <span>{c.name} ({c.email})</span>
-                 <button onClick={() => handleGeneratePassword(c.id)} disabled={loadingPassword === c.id} style={btnSuccess}>Send Pass</button>
-               </div>
-             ))}
-           </div>
+          <div style={{ display: "grid", gap: "10px" }}>
+            {pendingClients.map(c => (
+              <div key={c.id} style={pendingCard}>
+                <span>{c.name} ({c.email})</span>
+                <button onClick={() => handleGeneratePassword(c.id)} disabled={loadingPassword === c.id} style={btnSuccess}>Send Pass</button>
+              </div>
+            ))}
+          </div>
         )}
 
         {activeTab === "all" && (
@@ -169,7 +200,7 @@ export default function TrainerDashboard() {
            <main>
              {selectedClient && (
                <>
-                 {/* ✅ 3 CARDS - Initial (Read Only) | Current | Goal */}
+                 {/* ✅ 3 CARDS - Initial | Current | Goal */}
                  <div style={infoGrid}>
                    <InfoCard 
                      label="Initial Weight" 
@@ -229,7 +260,6 @@ export default function TrainerDashboard() {
                              setWeeklyWorkout({...weeklyWorkout, [activeWorkoutDay]: u})
                            }} 
                          />
-                         {/* ✅ WEIGHT INPUT ADDED */}
                          <input 
                            placeholder="Weight" 
                            value={ex.weight || ""} 
@@ -287,12 +317,18 @@ export default function TrainerDashboard() {
                      </div>
                    )}
 
-                   {selectedClient.diets?.map((d: any) => (
-                     <div key={d.id} style={dietRow}>
-                       <span>{d.time} - <b>{d.meal}</b></span>
-                       <span style={{color: "#3b82f6"}}>{d.calories} cals</span>
+                   {selectedClient.diets?.length > 0 ? (
+                     selectedClient.diets.map((d: any) => (
+                       <div key={d.id} style={dietRow}>
+                         <span>{d.time} - <b>{d.meal}</b></span>
+                         <span style={{color: "#3b82f6"}}>{d.calories} cals</span>
+                       </div>
+                     ))
+                   ) : (
+                     <div style={{ textAlign: "center", padding: "20px", color: "#9ca3af" }}>
+                       No diets added yet. Add your first meal! 🍎
                      </div>
-                   ))}
+                   )}
                  </section>
                </>
              )}

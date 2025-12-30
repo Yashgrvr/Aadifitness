@@ -37,14 +37,21 @@ interface Client {
   sessionsTotal: number;
 }
 
+// ✅ FIXED: Consistent day names
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
+type DayName = (typeof DAYS)[number];
+
 export default function ClientDashboard() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [clientData, setClientData] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeDayView, setActiveDayView] = useState("");
+  
+  // ✅ FIXED: Full day names + active date tracking
+  const [activeDayView, setActiveDayView] = useState<DayName>("Monday");
+  const [activeDate, setActiveDate] = useState("");
+  
   const [checklist, setChecklist] = useState<Record<string, { workout: boolean; diet: boolean }>>({});
-  const [todayDate] = useState(new Date().toISOString().split("T")[0]);
   const [weightInput, setWeightInput] = useState("");
   const [initialWeightInput, setInitialWeightInput] = useState("");
   const [savingWeight, setSavingWeight] = useState(false);
@@ -56,6 +63,17 @@ export default function ClientDashboard() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
+
+  // ✅ FIXED: Helper to get exact date for any weekday
+  const getISODateForWeekdayInCurrentWeek = (targetDay: DayName): string => {
+    const now = new Date();
+    const todayIdx = now.getDay(); // 0=Sun ... 6=Sat
+    const targetIdx = DAYS.indexOf(targetDay);
+    const diff = targetIdx - todayIdx;
+    const d = new Date(now);
+    d.setDate(now.getDate() + diff);
+    return d.toISOString().split("T")[0];
+  };
 
   // ✅ Persistent checklist save
   const saveChecklist = (checklistData: Record<string, { workout: boolean; diet: boolean }>) => {
@@ -78,8 +96,13 @@ export default function ClientDashboard() {
   };
 
   useEffect(() => {
-    const todayName = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
+    // ✅ FIXED: Always use FULL day name
+    const todayName = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date()) as DayName;
+    const todayISO = new Date().toISOString().split("T")[0];
+    
     setActiveDayView(todayName);
+    setActiveDate(todayISO);
+
     const storedName = localStorage.getItem("name");
     const role = localStorage.getItem("role");
     const clientId = localStorage.getItem("clientId");
@@ -139,7 +162,6 @@ export default function ClientDashboard() {
     const currentWeight = clientData.currentWeight;
     const goalWeight = clientData.goalWeight;
 
-    // ✅ Avoid division by zero
     if (initialWeight === 0 || goalWeight === 0 || initialWeight === goalWeight) return 0;
 
     if (initialWeight > goalWeight) {
@@ -166,21 +188,22 @@ export default function ClientDashboard() {
     return { completed, total: weeks };
   };
 
+  // ✅ FIXED: Consistent day name matching
   const filteredWorkouts = clientData?.workouts?.filter((w) =>
-    w.day?.toLowerCase() === activeDayView.toLowerCase()
+    (w.day || "").toLowerCase() === activeDayView.toLowerCase()
   ) || [];
 
   const filteredDiets = clientData?.diets || [];
 
-  // ✅ Toggle Workout Checklist
+  // ✅ FIXED: Use activeDate instead of todayDate
   const handleToggleWorkout = async (workoutId: string) => {
     const clientId = localStorage.getItem("clientId");
     if (!clientId) return;
 
     const newChecklist = { ...checklist };
-    if (!newChecklist[todayDate]) newChecklist[todayDate] = { workout: false, diet: false };
+    if (!newChecklist[activeDate]) newChecklist[activeDate] = { workout: false, diet: false };
 
-    newChecklist[todayDate].workout = !newChecklist[todayDate].workout;
+    newChecklist[activeDate].workout = !newChecklist[activeDate].workout;
     setChecklist(newChecklist);
     saveChecklist(newChecklist);
 
@@ -189,9 +212,9 @@ export default function ClientDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          date: todayDate,
+          date: activeDate,  // ✅ FIXED
           type: "workout",
-          completed: newChecklist[todayDate].workout,
+          completed: newChecklist[activeDate].workout,
           workoutId,
         }),
       });
@@ -200,15 +223,15 @@ export default function ClientDashboard() {
     }
   };
 
-  // ✅ Toggle Diet Checklist
+  // ✅ FIXED: Use activeDate instead of todayDate
   const handleToggleDiet = async (dietId: string) => {
     const clientId = localStorage.getItem("clientId");
     if (!clientId) return;
 
     const newChecklist = { ...checklist };
-    if (!newChecklist[todayDate]) newChecklist[todayDate] = { workout: false, diet: false };
+    if (!newChecklist[activeDate]) newChecklist[activeDate] = { workout: false, diet: false };
 
-    newChecklist[todayDate].diet = !newChecklist[todayDate].diet;
+    newChecklist[activeDate].diet = !newChecklist[activeDate].diet;
     setChecklist(newChecklist);
     saveChecklist(newChecklist);
 
@@ -217,9 +240,9 @@ export default function ClientDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          date: todayDate,
+          date: activeDate,  // ✅ FIXED
           type: "diet",
-          completed: newChecklist[todayDate].diet,
+          completed: newChecklist[activeDate].diet,
           dietId,
         }),
       });
@@ -318,7 +341,7 @@ export default function ClientDashboard() {
     }
   };
 
-  if (loading) return <div style={loaderStyle}>Loading Aadi Fitness...</div>;
+  if (loading) return <div style={loaderStyle}>Loading FitVibs...</div>;
 
   const weightProgress = calculateWeightProgress();
   const weeklyProgress = getWeeklyProgress();
@@ -370,7 +393,7 @@ export default function ClientDashboard() {
       </header>
 
       <main style={{ padding: "16px", maxWidth: "900px", margin: "0 auto" }}>
-        {/* ✅ INITIAL WEIGHT SETUP - First time only */}
+        {/* ✅ INITIAL WEIGHT SETUP */}
         {showInitialWeightForm && (
           <section style={{ ...sectionBox, background: "rgba(16, 185, 129, 0.1)", border: "2px solid #10b981" }}>
             <h2 style={sectionTitle}>🎯 Set Your Starting Weight</h2>
@@ -448,7 +471,7 @@ export default function ClientDashboard() {
             ></div>
           </div>
 
-          {/* ✅ 3 CARDS - Initial | Current | Goal */}
+          {/* ✅ 3 CARDS */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginTop: "16px" }}>
             <InfoCard label="Initial Weight" value={`${clientData?.initialWeight || 0}kg`} color="#9ca3af" />
             <InfoCard label="Current Weight" value={`${clientData?.currentWeight || 0}kg`} color="#3b82f6" />
@@ -456,25 +479,25 @@ export default function ClientDashboard() {
           </div>
         </section>
 
-        {/* ✅ DAILY CHECKLIST - WORKOUT & DIET */}
+        {/* ✅ DAILY CHECKLIST - FIXED */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
           <CheckItem
             title="Workouts"
-            done={checklist[todayDate]?.workout}
+            done={checklist[activeDate]?.workout || false}
             emoji="🏋️"
-            onClick={() => handleToggleWorkout("")}
+            onClick={() => handleToggleWorkout(filteredWorkouts[0]?.id || "")}
             subtext={filteredWorkouts.length + " exercises"}
           />
           <CheckItem
             title="Diet Plan"
-            done={checklist[todayDate]?.diet}
+            done={checklist[activeDate]?.diet || false}
             emoji="🥗"
-            onClick={() => handleToggleDiet("")}
+            onClick={() => handleToggleDiet(filteredDiets[0]?.id || "")}
             subtext={filteredDiets.length + " meals"}
           />
         </div>
 
-        {/* ✅ WEEKLY WORKOUTS WITH CHECKBOX */}
+        {/* ✅ WEEKLY WORKOUTS - FIXED TABS */}
         <section style={sectionBox}>
           <h2 style={sectionTitle}>📅 Weekly Workouts</h2>
           <div
@@ -486,13 +509,16 @@ export default function ClientDashboard() {
               gap: "8px",
             }}
           >
-            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+            {DAYS.map((day) => (
               <button
-                key={d}
-                onClick={() => setActiveDayView(d)}
-                style={activeDayView.startsWith(d) ? dayTabActive : dayTabInactive}
+                key={day}
+                onClick={() => {
+                  setActiveDayView(day);
+                  setActiveDate(getISODateForWeekdayInCurrentWeek(day)); // ✅ FIXED
+                }}
+                style={activeDayView === day ? dayTabActive : dayTabInactive}
               >
-                {d}
+                {day.slice(0, 3)}
               </button>
             ))}
           </div>
@@ -505,7 +531,7 @@ export default function ClientDashboard() {
               >
                 <input
                   type="checkbox"
-                  checked={checklist[todayDate]?.workout || false}
+                  checked={checklist[activeDate]?.workout || false}  // ✅ FIXED
                   onChange={() => handleToggleWorkout(w.id)}
                   style={{
                     width: "18px",
@@ -531,7 +557,7 @@ export default function ClientDashboard() {
           )}
         </section>
 
-        {/* ✅ MEAL PLAN WITH CHECKBOX */}
+        {/* ✅ MEAL PLAN - FIXED */}
         <section style={sectionBox}>
           <h2 style={sectionTitle}>🥗 Today's Meal Plan</h2>
           {clientData?.diets && clientData.diets.length > 0 ? (
@@ -539,7 +565,7 @@ export default function ClientDashboard() {
               <div key={d.id} style={dietRowWithCheckbox}>
                 <input
                   type="checkbox"
-                  checked={checklist[todayDate]?.diet || false}
+                  checked={checklist[activeDate]?.diet || false}  // ✅ FIXED
                   onChange={() => handleToggleDiet(d.id)}
                   style={{
                     width: "18px",
@@ -561,7 +587,7 @@ export default function ClientDashboard() {
           )}
         </section>
 
-        {/* ✅ LOG WEIGHT - AUTO UPDATES PROGRESS */}
+        {/* ✅ LOG WEIGHT */}
         <section style={sectionBox}>
           <h2 style={sectionTitle}>⚖️ Update Weight</h2>
           <div style={{ display: "flex", gap: "10px" }}>
@@ -587,14 +613,13 @@ export default function ClientDashboard() {
         </section>
       </main>
 
-      {/* ✅ GIF ZOOM */}
+      {/* ✅ GIF ZOOM & PASSWORD MODAL - SAME AS BEFORE */}
       {zoomGif && (
         <div style={overlay} onClick={() => setZoomGif(null)}>
           <img src={zoomGif} style={zoomedImg} alt="workout" />
         </div>
       )}
 
-      {/* ✅ PASSWORD MODAL */}
       {showPasswordModal && (
         <div style={modalBg}>
           <div style={modalContent}>
@@ -646,7 +671,7 @@ export default function ClientDashboard() {
   );
 }
 
-// ✅ SUB COMPONENTS
+// ✅ SUB COMPONENTS & STYLES - SAME AS BEFORE
 function InfoCard({ label, value, color }: any) {
   return (
     <div
@@ -702,7 +727,7 @@ function CheckItem({ title, done, emoji, onClick, subtext }: any) {
   );
 }
 
-// ✅ STYLES
+// ✅ STYLES (unchanged)
 const headerStyle = {
   padding: "20px 16px",
   background: "#1a1f2e",
