@@ -37,6 +37,7 @@ model Client {
   passwordGeneratedAt DateTime?
   passwordExpiresAt   DateTime?
   currentWeight       Float
+  initialWeight       Float?    
   goalWeight          Float
   fitnessGoal         FitnessGoal?
   plan                String

@@ -20,7 +20,7 @@ export default function TrainerDashboard() {
   });
   const [isBulkSaving, setIsBulkSaving] = useState(false);
 
-  // ✅ Diet States (Restored)
+  // ✅ Diet States
   const [showDietForm, setShowDietForm] = useState(false);
   const [dietTime, setDietTime] = useState("");
   const [dietMeal, setDietMeal] = useState("");
@@ -61,17 +61,23 @@ export default function TrainerDashboard() {
     const res = await fetch(`/api/clients/workout?clientId=${clientId}`);
     const data = await res.json();
     if (data.success) {
-      const organized: any = { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] };
+      const organized: any = { 
+        Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: [] 
+      };
       data.workouts.forEach((w: any) => { 
         if (organized[w.day]) organized[w.day].push({
-          id: w.id, exercise: w.exercise, sets: w.sets, reps: w.reps, weight: w.weight, gifUrl: w.gifUrl 
+          id: w.id, 
+          exercise: w.exercise, 
+          sets: w.sets, 
+          reps: w.reps, 
+          weight: w.weight || "0",  // ✅ Ensure weight exists
+          gifUrl: w.gifUrl 
         }); 
       });
       setWeeklyWorkout(organized);
     }
   };
 
-  // ✅ Client Actions
   const handleGeneratePassword = async (clientId: string) => {
     setLoadingPassword(clientId);
     const res = await fetch("/api/trainer/generate-password", {
@@ -92,7 +98,6 @@ export default function TrainerDashboard() {
     setIsBulkSaving(false);
   };
 
-  // ✅ Diet Logic (Restored)
   const handleAddDiet = async () => {
     if (!selectedClient) return;
     setSavingDiet(true);
@@ -101,7 +106,7 @@ export default function TrainerDashboard() {
       body: JSON.stringify({ clientId: selectedClient.id, time: dietTime, meal: dietMeal, calories: parseInt(dietCalories) }),
     });
     if (res.ok) { 
-      fetchAllClients(trainerId); // Refresh data
+      fetchAllClients(trainerId);
       setShowDietForm(false);
       setDietTime(""); setDietMeal(""); setDietCalories("");
     }
@@ -152,81 +157,154 @@ export default function TrainerDashboard() {
         )}
 
         {activeTab === "all" && (
-          <div style={{ display: "grid", gridTemplateColumns: "250px 1fr", gap: "20px" }}>
-            <aside>
-              {allClients.map(c => (
-                <button key={c.id} onClick={() => setSelectedClient(c)} style={selectedClient?.id === c.id ? clientBtnActive : clientBtnInactive}>
-                  {c.name}
-                </button>
-              ))}
-            </aside>
+         <div style={{ display: "grid", gridTemplateColumns: "250px 1fr", gap: "20px" }}>
+           <aside>
+             {allClients.map(c => (
+               <button key={c.id} onClick={() => setSelectedClient(c)} style={selectedClient?.id === c.id ? clientBtnActive : clientBtnInactive}>
+                 {c.name}
+               </button>
+             ))}
+           </aside>
 
-            <main>
-              {selectedClient && (
-                <>
-                  {/* ✅ Restore Client Details (Weight, Progress) */}
-                  <div style={infoGrid}>
-                    <InfoCard label="Weight" value={`${selectedClient.currentWeight}kg`} />
-                    <InfoCard label="Goal" value={`${selectedClient.goalWeight}kg`} highlight />
-                    <InfoCard label="Progress" value={`${selectedClient.progress}%`} color="#22c55e" />
-                  </div>
+           <main>
+             {selectedClient && (
+               <>
+                 {/* ✅ 3 CARDS - Initial (Read Only) | Current | Goal */}
+                 <div style={infoGrid}>
+                   <InfoCard 
+                     label="Initial Weight" 
+                     value={`${selectedClient.initialWeight || "—"}kg`} 
+                     color="#9ca3af"
+                     readOnly
+                   />
+                   <InfoCard 
+                     label="Current Weight" 
+                     value={`${selectedClient.currentWeight || 0}kg`} 
+                     color="#3b82f6"
+                   />
+                   <InfoCard 
+                     label="Goal Weight" 
+                     value={`${selectedClient.goalWeight || 0}kg`} 
+                     color="#22c55e"
+                     highlight
+                   />
+                 </div>
 
-                  {/* Workout Section */}
-                  <section style={sectionCard}>
-                    <h3>💪 Weekly Workout Planner</h3>
-                    <div style={daySelector}>
-                      {DAYS.map(d => <button key={d} onClick={() => setActiveWorkoutDay(d)} style={activeWorkoutDay === d ? dayTabActive : dayTabInactive}>{d.substring(0,3)}</button>)}
-                    </div>
-                    <div style={{ display: "grid", gap: "10px" }}>
-                      {weeklyWorkout[activeWorkoutDay].map((ex: any, idx: number) => (
-                        <div key={idx} style={exerciseRow}>
-                          <input placeholder="Exercise" value={ex.exercise} style={{...inputStyle, flex: 2}} onChange={e => { const u = [...weeklyWorkout[activeWorkoutDay]]; u[idx].exercise = e.target.value; setWeeklyWorkout({...weeklyWorkout, [activeWorkoutDay]: u})}} />
-                          <input placeholder="Sets" value={ex.sets} style={{...inputStyle, width: "40px"}} onChange={e => { const u = [...weeklyWorkout[activeWorkoutDay]]; u[idx].sets = e.target.value; setWeeklyWorkout({...weeklyWorkout, [activeWorkoutDay]: u})}} />
-                          <input placeholder="Reps" value={ex.reps} style={{...inputStyle, width: "40px"}} onChange={e => { const u = [...weeklyWorkout[activeWorkoutDay]]; u[idx].reps = e.target.value; setWeeklyWorkout({...weeklyWorkout, [activeWorkoutDay]: u})}} />
-                          <input type="file" onChange={e => handleGifUpload(e, idx)} style={{ fontSize: "8px", width: "80px" }} />
-                          {ex.gifUrl && <img src={ex.gifUrl} style={{ width: "25px", height: "25px", borderRadius: "4px" }} />}
-                          <button onClick={() => { const u = [...weeklyWorkout[activeWorkoutDay]]; u.splice(idx,1); setWeeklyWorkout({...weeklyWorkout, [activeWorkoutDay]: u})}} style={{color: "red", background: "none", border: "none"}}>✕</button>
-                        </div>
-                      ))}
-                      <button onClick={() => setWeeklyWorkout({...weeklyWorkout, [activeWorkoutDay]: [...weeklyWorkout[activeWorkoutDay], {exercise:"", sets:"", reps:"", weight:"0", gifUrl:""}]})} style={btnAddSmall}>+ Add Row</button>
-                    </div>
-                    <button onClick={handleSaveWeeklyPlan} disabled={isBulkSaving} style={btnBulkSave}>{isBulkSaving ? "Saving..." : "Save Week"}</button>
-                  </section>
+                 {/* Workout Section */}
+                 <section style={sectionCard}>
+                   <h3>💪 Weekly Workout Planner</h3>
+                   <div style={daySelector}>
+                     {DAYS.map(d => <button key={d} onClick={() => setActiveWorkoutDay(d)} style={activeWorkoutDay === d ? dayTabActive : dayTabInactive}>{d.substring(0,3)}</button>)}
+                   </div>
+                   <div style={{ display: "grid", gap: "10px" }}>
+                     {weeklyWorkout[activeWorkoutDay].map((ex: any, idx: number) => (
+                       <div key={idx} style={exerciseRow}>
+                         <input 
+                           placeholder="Exercise" 
+                           value={ex.exercise} 
+                           style={{...inputStyle, flex: 2}} 
+                           onChange={e => { 
+                             const u = [...weeklyWorkout[activeWorkoutDay]]; 
+                             u[idx].exercise = e.target.value; 
+                             setWeeklyWorkout({...weeklyWorkout, [activeWorkoutDay]: u})
+                           }} 
+                         />
+                         <input 
+                           placeholder="Sets" 
+                           value={ex.sets} 
+                           style={{...inputStyle, width: "50px"}} 
+                           onChange={e => { 
+                             const u = [...weeklyWorkout[activeWorkoutDay]]; 
+                             u[idx].sets = e.target.value; 
+                             setWeeklyWorkout({...weeklyWorkout, [activeWorkoutDay]: u})
+                           }} 
+                         />
+                         <input 
+                           placeholder="Reps" 
+                           value={ex.reps} 
+                           style={{...inputStyle, width: "50px"}} 
+                           onChange={e => { 
+                             const u = [...weeklyWorkout[activeWorkoutDay]]; 
+                             u[idx].reps = e.target.value; 
+                             setWeeklyWorkout({...weeklyWorkout, [activeWorkoutDay]: u})
+                           }} 
+                         />
+                         {/* ✅ WEIGHT INPUT ADDED */}
+                         <input 
+                           placeholder="Weight" 
+                           value={ex.weight || ""} 
+                           style={{...inputStyle, width: "60px"}} 
+                           onChange={e => { 
+                             const u = [...weeklyWorkout[activeWorkoutDay]]; 
+                             u[idx].weight = e.target.value; 
+                             setWeeklyWorkout({...weeklyWorkout, [activeWorkoutDay]: u})
+                           }} 
+                         />
+                         <input 
+                           type="file" 
+                           onChange={e => handleGifUpload(e, idx)} 
+                           style={{ fontSize: "8px", width: "70px" }} 
+                         />
+                         {ex.gifUrl && <img src={ex.gifUrl} style={{ width: "25px", height: "25px", borderRadius: "4px" }} alt="gif" />}
+                         <button 
+                           onClick={() => { 
+                             const u = [...weeklyWorkout[activeWorkoutDay]]; 
+                             u.splice(idx,1); 
+                             setWeeklyWorkout({...weeklyWorkout, [activeWorkoutDay]: u})
+                           }} 
+                           style={{color: "red", background: "none", border: "none"}}
+                         >
+                           ✕
+                         </button>
+                       </div>
+                     ))}
+                     <button 
+                       onClick={() => setWeeklyWorkout({
+                         ...weeklyWorkout, 
+                         [activeWorkoutDay]: [...weeklyWorkout[activeWorkoutDay], {exercise:"", sets:"", reps:"", weight:"0", gifUrl:""}]
+                       })} 
+                       style={btnAddSmall}
+                     >
+                       + Add Row
+                     </button>
+                   </div>
+                   <button onClick={handleSaveWeeklyPlan} disabled={isBulkSaving} style={btnBulkSave}>{isBulkSaving ? "Saving..." : "Save Week"}</button>
+                 </section>
 
-                  {/* ✅ Restore Diet Plan Section */}
-                  <section style={{...sectionCard, marginTop: "20px"}}>
-                    <div style={{display: "flex", justifyContent: "space-between", marginBottom: "15px"}}>
-                      <h3>🍎 Diet Plan</h3>
-                      <button onClick={() => setShowDietForm(!showDietForm)} style={btnAddSmall}>{showDietForm ? "Cancel" : "+ Add Meal"}</button>
-                    </div>
+                 {/* Diet Plan Section */}
+                 <section style={{...sectionCard, marginTop: "20px"}}>
+                   <div style={{display: "flex", justifyContent: "space-between", marginBottom: "15px"}}>
+                     <h3>🍎 Diet Plan</h3>
+                     <button onClick={() => setShowDietForm(!showDietForm)} style={btnAddSmall}>{showDietForm ? "Cancel" : "+ Add Meal"}</button>
+                   </div>
 
-                    {showDietForm && (
-                      <div style={quickForm}>
-                        <input placeholder="Time" value={dietTime} onChange={e => setDietTime(e.target.value)} style={inputStyle} />
-                        <input placeholder="Meal" value={dietMeal} onChange={e => setDietMeal(e.target.value)} style={inputStyle} />
-                        <input placeholder="Cals" type="number" value={dietCalories} onChange={e => setDietCalories(e.target.value)} style={inputStyle} />
-                        <button onClick={handleAddDiet} disabled={savingDiet} style={btnSuccess}>{savingDiet ? "..." : "Save"}</button>
-                      </div>
-                    )}
+                   {showDietForm && (
+                     <div style={quickForm}>
+                       <input placeholder="Time" value={dietTime} onChange={e => setDietTime(e.target.value)} style={inputStyle} />
+                       <input placeholder="Meal" value={dietMeal} onChange={e => setDietMeal(e.target.value)} style={inputStyle} />
+                       <input placeholder="Cals" type="number" value={dietCalories} onChange={e => setDietCalories(e.target.value)} style={inputStyle} />
+                       <button onClick={handleAddDiet} disabled={savingDiet} style={btnSuccess}>{savingDiet ? "..." : "Save"}</button>
+                     </div>
+                   )}
 
-                    {selectedClient.diets?.map((d: any) => (
-                      <div key={d.id} style={dietRow}>
-                        <span>{d.time} - <b>{d.meal}</b></span>
-                        <span style={{color: "#3b82f6"}}>{d.calories} cals</span>
-                      </div>
-                    ))}
-                  </section>
-                </>
-              )}
-            </main>
-          </div>
+                   {selectedClient.diets?.map((d: any) => (
+                     <div key={d.id} style={dietRow}>
+                       <span>{d.time} - <b>{d.meal}</b></span>
+                       <span style={{color: "#3b82f6"}}>{d.calories} cals</span>
+                     </div>
+                   ))}
+                 </section>
+               </>
+             )}
+           </main>
+         </div>
         )}
       </div>
     </div>
   );
 }
 
-// --- Styles (Identical to previous versions but fully applied) ---
+// --- Styles ---
 const headerStyle = { padding: "16px", borderBottom: "1px solid #1f2937", display: "flex", justifyContent: "space-between", alignItems: "center" };
 const tabActive = { background: "#3b82f6", color: "white", padding: "8px 16px", borderRadius: "8px", border: "none", cursor: "pointer" };
 const tabInactive = { background: "#1f2937", color: "white", padding: "8px 16px", borderRadius: "8px", border: "none", cursor: "pointer" };
@@ -247,9 +325,15 @@ const btnSecondary = { background: "none", border: "1px solid #4b5563", color: "
 const quickForm = { display: "flex", gap: "8px", background: "#020617", padding: "10px", borderRadius: "8px", marginBottom: "15px" };
 const dietRow = { display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #ffffff08", fontSize: "13px" };
 
-function InfoCard({ label, value, highlight, color }: any) {
+function InfoCard({ label, value, highlight, color, readOnly }: any) {
   return (
-    <div style={{ background: "#0b1120", padding: "12px", borderRadius: "8px", border: highlight ? "1px solid #3b82f6" : "1px solid #1f2937" }}>
+    <div style={{ 
+      background: "#0b1120", 
+      padding: "12px", 
+      borderRadius: "8px", 
+      border: highlight ? "1px solid #3b82f6" : readOnly ? "1px solid #4b5563" : "1px solid #1f2937",
+      opacity: readOnly ? 0.7 : 1
+    }}>
       <p style={{ fontSize: "10px", color: "#9ca3af", marginBottom: "4px" }}>{label}</p>
       <p style={{ fontSize: "16px", fontWeight: "bold", color: color || "white" }}>{value}</p>
     </div>

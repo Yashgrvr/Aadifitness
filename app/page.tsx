@@ -103,7 +103,7 @@ export default function HomePage() {
           </div>
           <div>
             <h1 style={{ margin: 0, fontSize: 20, fontWeight: 950, letterSpacing: -0.8 }}>
-              Aadi
+              FitVibs
             </h1>
             <p
               style={{
@@ -115,7 +115,7 @@ export default function HomePage() {
                 fontWeight: 600,
               }}
             >
-              Fitness
+              Training Platform
             </p>
           </div>
         </div>
@@ -172,7 +172,7 @@ export default function HomePage() {
             opacity: 0.9,
           }}
         >
-          Personal Training Evolved
+          Train Smart. Track Everything.
         </p>
 
         {/* Main headline */}
@@ -187,7 +187,7 @@ export default function HomePage() {
             textShadow: "0 20px 40px rgba(59,130,246,0.15)",
           }}
         >
-          Train with{" "}
+          Transform with{" "}
           <span
             style={{
               background: "linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%)",
@@ -196,10 +196,10 @@ export default function HomePage() {
               WebkitTextFillColor: "transparent",
             }}
           >
-            Aadi&apos;s system.
+            FitVibs.
           </span>
           <br />
-          Track everything. Own your results.
+          Your personal training platform.
         </h1>
 
         {/* Subheading */}
@@ -213,7 +213,7 @@ export default function HomePage() {
             fontWeight: 400,
           }}
         >
-          A complete platform for trainers to coach and clients to excel. Workouts, nutrition, weekly goals—all synced in real-time.
+          Connect with expert trainers. Customize your workouts. Track your nutrition. Achieve your goals—all in one place.
         </p>
 
         {/* CTA Buttons */}
@@ -288,6 +288,7 @@ export default function HomePage() {
             gap: 20,
             maxWidth: 900,
             width: "100%",
+            marginBottom: 40,
           }}
         >
           {features.map((feature, idx) => (
@@ -339,21 +340,117 @@ export default function HomePage() {
             </div>
           ))}
         </div>
+
+        {/* ✅ COMPACT Visit Us Section */}
+        <div
+          style={{
+            background: "rgba(30,40,60,0.4)",
+            border: "1px solid rgba(59,130,246,0.2)",
+            borderRadius: 16,
+            padding: "24px",
+            maxWidth: 500,
+            width: "100%",
+            textAlign: "center",
+            backdropFilter: "blur(10px)",
+            marginBottom: 20,
+          }}
+        >
+          <h3 style={{ margin: "0 0 16px 0", fontSize: 18, fontWeight: 700, color: "#e0e7ff" }}>
+            🏢 Titanium Fitness
+          </h3>
+          
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, alignItems: "center" }}>
+            {/* Left - Gym & Address */}
+            <div>
+              <p style={{ fontSize: 14, color: "#a5b4fc", margin: "0 0 4px 0", fontWeight: 600 }}>
+                A-1/10, 4th Floor
+              </p>
+              <p style={{ fontSize: 13, color: "#cbd5e1", margin: 0 }}>
+                Sector 8, Noida
+              </p>
+            </div>
+            
+            {/* Right - Contact */}
+            <div style={{ textAlign: "right" }}>
+              <a
+                href="tel:+919999374474"
+                style={{ 
+                  fontSize: 16, 
+                  color: "#60a5fa", 
+                  fontWeight: 700, 
+                  textDecoration: "none",
+                  display: "block",
+                  marginBottom: 4
+                }}
+              >
+                📱 99993 74474
+              </a>
+              <p style={{ fontSize: 13, color: "#e0e7ff", margin: 0, fontWeight: 600 }}>
+                Aditya Singh
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Footer */}
+      {/* ✅ DETAILED FOOTER */}
       <footer
         style={{
-          padding: "16px 32px",
+          padding: "32px 32px",
           textAlign: "center",
-          fontSize: 12,
-          color: "#475569",
-          borderTop: "1px solid rgba(59,130,246,0.08)",
+          background: "rgba(15,23,42,0.8)",
+          borderTop: "1px solid rgba(59,130,246,0.2)",
           position: "relative",
           zIndex: 1,
         }}
       >
-        © {new Date().getFullYear()} Aadi Fitness. Where trainers and clients transform together.
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ margin: "0 0 8px 0", fontSize: 14, fontWeight: 600, color: "#e0e7ff" }}>
+            © {new Date().getFullYear()} FitVibs
+          </p>
+          <p style={{ margin: 0, fontSize: 12, color: "#64748b" }}>
+            Powered by Titanium Fitness
+          </p>
+        </div>
+        
+        <div style={{ 
+          display: "grid", 
+          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", 
+          gap: 20, 
+          maxWidth: 800, 
+          margin: "0 auto" 
+        }}>
+          <div>
+            <p style={{ fontSize: 13, color: "#9ca3af", margin: "0 0 8px 0", fontWeight: 600 }}>
+              📍 Location
+            </p>
+            <p style={{ fontSize: 14, color: "#e0e7ff", margin: 0 }}>
+              A-1/10, 4th Floor<br/>
+              Sector 8, Noida
+            </p>
+          </div>
+          
+          <div>
+            <p style={{ fontSize: 13, color: "#9ca3af", margin: "0 0 8px 0", fontWeight: 600 }}>
+              📱 Contact
+            </p>
+            <a 
+              href="tel:+919999374474"
+              style={{ fontSize: 15, color: "#60a5fa", fontWeight: 700, textDecoration: "none" }}
+            >
+              +91 99993 74474
+            </a>
+          </div>
+          
+          <div>
+            <p style={{ fontSize: 13, color: "#9ca3af", margin: "0 0 8px 0", fontWeight: 600 }}>
+              👨‍🏫 Trainer
+            </p>
+            <p style={{ fontSize: 15, color: "#e0e7ff", margin: 0, fontWeight: 700 }}>
+              Aditya Singh
+            </p>
+          </div>
+        </div>
       </footer>
 
       {/* CSS Animations */}

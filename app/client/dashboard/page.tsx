@@ -4,17 +4,37 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 interface Workout {
-  id: string; exercise: string; sets: string; reps: string;
-  weight: string; gifUrl?: string; day?: string; completed?: boolean;
+  id: string;
+  exercise: string;
+  sets: string;
+  reps: string;
+  weight: string;
+  gifUrl?: string;
+  day?: string;
+  completed?: boolean;
 }
 
-interface Diet { id: string; time: string; meal: string; calories: number; completed?: boolean; }
+interface Diet {
+  id: string;
+  time: string;
+  meal: string;
+  calories: number;
+  completed?: boolean;
+}
 
 interface Client {
-  id: string; name: string; email: string; currentWeight: number;
-  goalWeight: number; plan: string; progress: number;
-  workouts: Workout[]; diets: Diet[];
-  sessionsCompleted: number; sessionsTotal: number;
+  id: string;
+  name: string;
+  email: string;
+  initialWeight?: number;
+  currentWeight: number;
+  goalWeight: number;
+  plan: string;
+  progress: number;
+  workouts: Workout[];
+  diets: Diet[];
+  sessionsCompleted: number;
+  sessionsTotal: number;
 }
 
 export default function ClientDashboard() {
@@ -26,7 +46,9 @@ export default function ClientDashboard() {
   const [checklist, setChecklist] = useState<Record<string, { workout: boolean; diet: boolean }>>({});
   const [todayDate] = useState(new Date().toISOString().split("T")[0]);
   const [weightInput, setWeightInput] = useState("");
+  const [initialWeightInput, setInitialWeightInput] = useState("");
   const [savingWeight, setSavingWeight] = useState(false);
+  const [savingInitialWeight, setSavingInitialWeight] = useState(false);
   const [zoomGif, setZoomGif] = useState<string | null>(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [oldPassword, setOldPassword] = useState("");
@@ -35,26 +57,59 @@ export default function ClientDashboard() {
   const [passwordError, setPasswordError] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
 
+  // ✅ Persistent checklist save
+  const saveChecklist = (checklistData: Record<string, { workout: boolean; diet: boolean }>) => {
+    localStorage.setItem("client_checklist_backup", JSON.stringify(checklistData));
+  };
+
+  // ✅ Load checklist backup
+  const loadChecklistBackup = () => {
+    const backup = localStorage.getItem("client_checklist_backup");
+    if (backup) {
+      try {
+        const parsed = JSON.parse(backup);
+        setChecklist(parsed);
+        return parsed;
+      } catch (err) {
+        console.error("Backup load error:", err);
+      }
+    }
+    return {};
+  };
+
   useEffect(() => {
-    const todayName = new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(new Date());
+    const todayName = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
     setActiveDayView(todayName);
     const storedName = localStorage.getItem("name");
     const role = localStorage.getItem("role");
     const clientId = localStorage.getItem("clientId");
 
-    if (!role || role !== "client") { router.replace("/login"); return; }
+    if (!role || role !== "client") {
+      router.replace("/login");
+      return;
+    }
     setName(storedName || "Client");
+    loadChecklistBackup();
+
     if (clientId) fetchClientData(clientId);
   }, [router]);
 
+  // ✅ Fetch client data
   const fetchClientData = async (clientId: string) => {
     try {
       const res = await fetch(`/api/clients/${clientId}`);
       if (res.ok) {
         const data = await res.json();
         const client = data.client ? data.client : data;
-        setClientData(client);
-        setWeightInput(String(client.currentWeight || ""));
+
+        setClientData({
+          ...client,
+          currentWeight: client.currentWeight || 0,
+          goalWeight: client.goalWeight || 0,
+          initialWeight: client.initialWeight || 0,
+        });
+        setWeightInput(String(client.currentWeight || 0));
+        setInitialWeightInput(String(client.initialWeight || 0));
 
         const cRes = await fetch(`/api/clients/${clientId}/checklist`);
         if (cRes.ok) {
@@ -66,27 +121,32 @@ export default function ClientDashboard() {
           });
           setChecklist(map);
         }
+      } else {
+        console.error("Failed to fetch client:", res.status);
       }
-    } catch (err) { console.error(err); } finally { setLoading(false); }
+    } catch (err) {
+      console.error("Fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // ✅ SMART Weight Progress - Based on Initial Weight + Goal
+  // ✅ Weight progress calculation
   const calculateWeightProgress = () => {
     if (!clientData) return 0;
-    
-    // Get initial weight from signup (if available, else use current)
-    const initialWeight = clientData.currentWeight; // Change if you track signup weight
+
+    const initialWeight = clientData.initialWeight || clientData.currentWeight;
     const currentWeight = clientData.currentWeight;
     const goalWeight = clientData.goalWeight;
-    
-    // Weight loss direction
+
+    // ✅ Avoid division by zero
+    if (initialWeight === 0 || goalWeight === 0 || initialWeight === goalWeight) return 0;
+
     if (initialWeight > goalWeight) {
       const totalToLose = initialWeight - goalWeight;
       const alreadyLost = initialWeight - currentWeight;
       return Math.min(100, Math.round((alreadyLost / totalToLose) * 100));
-    }
-    // Weight gain direction
-    else {
+    } else {
       const totalToGain = goalWeight - initialWeight;
       const alreadyGained = currentWeight - initialWeight;
       return Math.min(100, Math.round((alreadyGained / totalToGain) * 100));
@@ -106,7 +166,7 @@ export default function ClientDashboard() {
     return { completed, total: weeks };
   };
 
-  const filteredWorkouts = clientData?.workouts?.filter(w => 
+  const filteredWorkouts = clientData?.workouts?.filter((w) =>
     w.day?.toLowerCase() === activeDayView.toLowerCase()
   ) || [];
 
@@ -119,23 +179,25 @@ export default function ClientDashboard() {
 
     const newChecklist = { ...checklist };
     if (!newChecklist[todayDate]) newChecklist[todayDate] = { workout: false, diet: false };
-    
-    // Mark entire workout type as done
+
     newChecklist[todayDate].workout = !newChecklist[todayDate].workout;
     setChecklist(newChecklist);
+    saveChecklist(newChecklist);
 
     try {
       await fetch(`/api/clients/${clientId}/checklist`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          date: todayDate, 
-          type: "workout", 
+        body: JSON.stringify({
+          date: todayDate,
+          type: "workout",
           completed: newChecklist[todayDate].workout,
-          workoutId 
+          workoutId,
         }),
       });
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   // ✅ Toggle Diet Checklist
@@ -145,25 +207,65 @@ export default function ClientDashboard() {
 
     const newChecklist = { ...checklist };
     if (!newChecklist[todayDate]) newChecklist[todayDate] = { workout: false, diet: false };
-    
-    // Mark entire diet type as done
+
     newChecklist[todayDate].diet = !newChecklist[todayDate].diet;
     setChecklist(newChecklist);
+    saveChecklist(newChecklist);
 
     try {
       await fetch(`/api/clients/${clientId}/checklist`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          date: todayDate, 
-          type: "diet", 
+        body: JSON.stringify({
+          date: todayDate,
+          type: "diet",
           completed: newChecklist[todayDate].diet,
-          dietId 
+          dietId,
         }),
       });
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
+  // ✅ Set initial weight
+  const handleSetInitialWeight = async () => {
+    const clientId = localStorage.getItem("clientId");
+    if (!clientId || !clientData || !initialWeightInput) return;
+
+    setSavingInitialWeight(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "updateInitialWeight",
+          initialWeight: parseFloat(initialWeightInput),
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const updated = data.client || data;
+        setClientData({
+          ...updated,
+          currentWeight: updated.currentWeight || 0,
+          goalWeight: updated.goalWeight || 0,
+          initialWeight: updated.initialWeight || 0,
+        });
+        alert("✅ Initial weight set! Progress tracking started 🚀");
+      } else {
+        alert("❌ Error setting initial weight");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("❌ Server error");
+    } finally {
+      setSavingInitialWeight(false);
+    }
+  };
+
+  // ✅ Update current weight
   const handleUpdateWeight = async () => {
     const clientId = localStorage.getItem("clientId");
     if (!clientId || !clientData) return;
@@ -177,14 +279,24 @@ export default function ClientDashboard() {
       if (res.ok) {
         const data = await res.json();
         const updated = data.client || data;
-        setClientData(updated);
+        setClientData({
+          ...updated,
+          currentWeight: updated.currentWeight || 0,
+          goalWeight: updated.goalWeight || 0,
+          initialWeight: updated.initialWeight || 0,
+        });
         alert("🎉 Weight Updated! Your progress is: " + calculateWeightProgress() + "%");
       }
-    } finally { setSavingWeight(false); }
+    } finally {
+      setSavingWeight(false);
+    }
   };
 
   const handleChangePassword = async () => {
-    if (newPassword !== confirmPassword) { setPasswordError("Passwords do not match"); return; }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match");
+      return;
+    }
     setSavingPassword(true);
     try {
       const res = await fetch("/api/clients/change-password", {
@@ -192,89 +304,171 @@ export default function ClientDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clientId: clientData?.id, oldPassword, newPassword }),
       });
-      if (res.ok) { 
+      if (res.ok) {
         alert("✅ Password Changed Successfully!");
         setShowPasswordModal(false);
         setOldPassword("");
         setNewPassword("");
         setConfirmPassword("");
+      } else {
+        setPasswordError("Failed to change password");
       }
-      else { setPasswordError("Failed to change password"); }
-    } finally { setSavingPassword(false); }
+    } finally {
+      setSavingPassword(false);
+    }
   };
 
   if (loading) return <div style={loaderStyle}>Loading Aadi Fitness...</div>;
 
   const weightProgress = calculateWeightProgress();
   const weeklyProgress = getWeeklyProgress();
+  const showInitialWeightForm = !clientData?.initialWeight || clientData.initialWeight === 0;
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%)", color: "#e5e7eb" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%)",
+        color: "#e5e7eb",
+      }}
+    >
       {/* ✅ WELCOME HEADER */}
       <header style={headerStyle}>
         <div>
-          <h1 style={{ fontSize: "24px", fontWeight: 900, margin: 0, background: "linear-gradient(90deg, #3b82f6, #60a5fa)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+          <h1
+            style={{
+              fontSize: "24px",
+              fontWeight: 900,
+              margin: 0,
+              background: "linear-gradient(90deg, #3b82f6, #60a5fa)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+            }}
+          >
             💪 Welcome, {name}!
           </h1>
-          <p style={{ fontSize: "12px", color: "#9ca3af", margin: "4px 0 0 0" }}>Keep grinding! Your transformation starts here 🚀</p>
+          <p style={{ fontSize: "12px", color: "#9ca3af", margin: "4px 0 0 0" }}>
+            Keep grinding! Your transformation starts here 🚀
+          </p>
         </div>
         <div style={{ display: "flex", gap: "10px" }}>
-          <button onClick={() => setShowPasswordModal(true)} style={btnSecondary}>🔐 Pass</button>
-          <button onClick={() => { localStorage.clear(); router.push("/login"); }} style={btnDanger}>Logout</button>
+          <button onClick={() => setShowPasswordModal(true)} style={btnSecondary}>
+            🔐 Pass
+          </button>
+          <button
+            onClick={() => {
+              localStorage.removeItem("name");
+              localStorage.removeItem("role");
+              localStorage.removeItem("clientId");
+              router.push("/login");
+            }}
+            style={btnDanger}
+          >
+            Logout
+          </button>
         </div>
       </header>
 
       <main style={{ padding: "16px", maxWidth: "900px", margin: "0 auto" }}>
-        
-        {/* ✅ GOAL & PROGRESS SECTION - AUTO UPDATE */}
+        {/* ✅ INITIAL WEIGHT SETUP - First time only */}
+        {showInitialWeightForm && (
+          <section style={{ ...sectionBox, background: "rgba(16, 185, 129, 0.1)", border: "2px solid #10b981" }}>
+            <h2 style={sectionTitle}>🎯 Set Your Starting Weight</h2>
+            <p style={{ fontSize: "12px", color: "#9ca3af", marginBottom: "12px" }}>
+              💡 Your starting weight is crucial to track real progress!
+            </p>
+            <div style={{ display: "flex", gap: "12px" }}>
+              <input
+                type="number"
+                step="0.1"
+                placeholder="Starting Weight (kg)"
+                value={initialWeightInput}
+                onChange={(e) => setInitialWeightInput(e.target.value)}
+                style={inputStyle}
+              />
+              <button 
+                onClick={handleSetInitialWeight} 
+                style={btnMain}
+                disabled={savingInitialWeight}
+              >
+                {savingInitialWeight ? "Setting..." : "Set Initial"}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ✅ GOAL & PROGRESS SECTION */}
         <section style={sectionBox}>
           <h2 style={sectionTitle}>📈 Your Transformation Journey</h2>
-          
+
           {/* Progress towards goal */}
           <div style={{ marginBottom: "20px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
               <span style={{ fontSize: "13px", fontWeight: 600 }}>Goal Progress: {weightProgress}%</span>
-              <span style={{ fontSize: "12px", color: "#9ca3af" }}>{clientData?.currentWeight}kg → {clientData?.goalWeight}kg</span>
+              <span style={{ fontSize: "12px", color: "#9ca3af" }}>
+                {clientData?.currentWeight || 0}kg → {clientData?.goalWeight || 0}kg
+              </span>
             </div>
             <div style={progressBarBg}>
-              <div style={{ ...progressBarFill, width: `${weightProgress}%`, background: "linear-gradient(90deg, #10b981, #34d399)" }}></div>
+              <div
+                style={{
+                  ...progressBarFill,
+                  width: `${weightProgress}%`,
+                  background: "linear-gradient(90deg, #10b981, #34d399)",
+                }}
+              ></div>
             </div>
             <p style={{ fontSize: "11px", color: "#9ca3af", margin: "8px 0 0 0" }}>
-              {weightProgress < 50 ? "🔥 You're just getting started! Keep pushing!" : 
-               weightProgress < 100 ? "💪 Halfway there! You're crushing it!" : 
-               "🏆 Goal achieved! Time for a new challenge!"}
+              {weightProgress === 0
+                ? "⏳ Set initial weight to start tracking!"
+                : weightProgress < 50
+                ? "🔥 You're just getting started! Keep pushing!"
+                : weightProgress < 100
+                ? "💪 Halfway there! You're crushing it!"
+                : "🏆 Goal achieved! Time for a new challenge!"}
             </p>
           </div>
 
           {/* Weekly Workouts */}
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-            <span style={{ fontSize: "13px", fontWeight: 600 }}>Weekly Workouts: {weeklyProgress.completed}/{weeklyProgress.total}</span>
-            <span style={{ fontSize: "12px", color: "#10b981" }}>🔥 {Math.round((weeklyProgress.completed / weeklyProgress.total) * 100)}% Complete</span>
+            <span style={{ fontSize: "13px", fontWeight: 600 }}>
+              Weekly Workouts: {weeklyProgress.completed}/{weeklyProgress.total}
+            </span>
+            <span style={{ fontSize: "12px", color: "#10b981" }}>
+              🔥 {Math.round((weeklyProgress.completed / weeklyProgress.total) * 100)}% Complete
+            </span>
           </div>
           <div style={progressBarBg}>
-            <div style={{ ...progressBarFill, width: `${(weeklyProgress.completed / weeklyProgress.total) * 100}%`, background: "linear-gradient(90deg, #10b981, #34d399)" }}></div>
+            <div
+              style={{
+                ...progressBarFill,
+                width: `${(weeklyProgress.completed / weeklyProgress.total) * 100}%`,
+                background: "linear-gradient(90deg, #10b981, #34d399)",
+              }}
+            ></div>
           </div>
 
-          {/* Stats Cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginTop: "16px" }}>
-            <InfoCard label="Current Weight" value={`${clientData?.currentWeight}kg`} color="#3b82f6" />
-            <InfoCard label="Goal Weight" value={`${clientData?.goalWeight}kg`} color="#10b981" />
+          {/* ✅ 3 CARDS - Initial | Current | Goal */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginTop: "16px" }}>
+            <InfoCard label="Initial Weight" value={`${clientData?.initialWeight || 0}kg`} color="#9ca3af" />
+            <InfoCard label="Current Weight" value={`${clientData?.currentWeight || 0}kg`} color="#3b82f6" />
+            <InfoCard label="Goal Weight" value={`${clientData?.goalWeight || 0}kg`} color="#10b981" />
           </div>
         </section>
 
         {/* ✅ DAILY CHECKLIST - WORKOUT & DIET */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
-          <CheckItem 
-            title="Workouts" 
-            done={checklist[todayDate]?.workout} 
-            emoji="🏋️" 
+          <CheckItem
+            title="Workouts"
+            done={checklist[todayDate]?.workout}
+            emoji="🏋️"
             onClick={() => handleToggleWorkout("")}
             subtext={filteredWorkouts.length + " exercises"}
           />
-          <CheckItem 
-            title="Diet Plan" 
-            done={checklist[todayDate]?.diet} 
-            emoji="🥗" 
+          <CheckItem
+            title="Diet Plan"
+            done={checklist[todayDate]?.diet}
+            emoji="🥗"
             onClick={() => handleToggleDiet("")}
             subtext={filteredDiets.length + " meals"}
           />
@@ -283,81 +477,167 @@ export default function ClientDashboard() {
         {/* ✅ WEEKLY WORKOUTS WITH CHECKBOX */}
         <section style={sectionBox}>
           <h2 style={sectionTitle}>📅 Weekly Workouts</h2>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px", overflowX: "auto", gap: "8px" }}>
-            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(d => (
-              <button key={d} onClick={() => setActiveDayView(d)} style={activeDayView.startsWith(d) ? dayTabActive : dayTabInactive}>{d}</button>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: "15px",
+              overflowX: "auto",
+              gap: "8px",
+            }}
+          >
+            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+              <button
+                key={d}
+                onClick={() => setActiveDayView(d)}
+                style={activeDayView.startsWith(d) ? dayTabActive : dayTabInactive}
+              >
+                {d}
+              </button>
             ))}
           </div>
-          {filteredWorkouts.length > 0 ? filteredWorkouts.map(w => (
-            <div key={w.id} style={workoutRow} onClick={() => w.gifUrl && setZoomGif(w.gifUrl)}>
-              <input 
-                type="checkbox" 
-                checked={checklist[todayDate]?.workout || false}
-                onChange={() => handleToggleWorkout(w.id)}
-                style={{ width: "18px", height: "18px", cursor: "pointer", accentColor: "#3b82f6" }}
-                onClick={(e) => e.stopPropagation()}
-              />
-              <img src={w.gifUrl || "/placeholder.png"} style={thumbStyle} alt={w.exercise} />
-              <div style={{ flex: 1 }}>
-                <p style={{ fontWeight: 600, fontSize: "14px" }}>{w.exercise}</p>
-                <p style={{ fontSize: "12px", color: "#9ca3af" }}>{w.sets} Sets × {w.reps} Reps {w.weight && `@ ${w.weight}kg`}</p>
+          {filteredWorkouts.length > 0 ? (
+            filteredWorkouts.map((w) => (
+              <div
+                key={w.id}
+                style={workoutRow}
+                onClick={() => w.gifUrl && setZoomGif(w.gifUrl)}
+              >
+                <input
+                  type="checkbox"
+                  checked={checklist[todayDate]?.workout || false}
+                  onChange={() => handleToggleWorkout(w.id)}
+                  style={{
+                    width: "18px",
+                    height: "18px",
+                    cursor: "pointer",
+                    accentColor: "#3b82f6",
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <img src={w.gifUrl || "/placeholder.png"} style={thumbStyle} alt={w.exercise} />
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontWeight: 600, fontSize: "14px" }}>{w.exercise}</p>
+                  <p style={{ fontSize: "12px", color: "#9ca3af" }}>
+                    {w.sets} Sets × {w.reps} Reps {w.weight && `@ ${w.weight}kg`}
+                  </p>
+                </div>
               </div>
-            </div>
-          )) : <p style={{ textAlign: "center", color: "#4b5563", padding: "20px" }}>🛏️ Rest Day - Recover Strong!</p>}
+            ))
+          ) : (
+            <p style={{ textAlign: "center", color: "#4b5563", padding: "20px" }}>
+              🛏️ Keep Growing your Workout will be Updated Tomorrow
+            </p>
+          )}
         </section>
 
         {/* ✅ MEAL PLAN WITH CHECKBOX */}
         <section style={sectionBox}>
           <h2 style={sectionTitle}>🥗 Today's Meal Plan</h2>
-          {clientData?.diets && clientData.diets.length > 0 ? clientData.diets.map(d => (
-            <div key={d.id} style={dietRowWithCheckbox}>
-              <input 
-                type="checkbox" 
-                checked={checklist[todayDate]?.diet || false}
-                onChange={() => handleToggleDiet(d.id)}
-                style={{ width: "18px", height: "18px", cursor: "pointer", accentColor: "#10b981" }}
-              />
-              <div style={{ flex: 1 }}>
-                <span style={{ fontWeight: 500 }}>{d.time} - {d.meal}</span>
+          {clientData?.diets && clientData.diets.length > 0 ? (
+            clientData.diets.map((d) => (
+              <div key={d.id} style={dietRowWithCheckbox}>
+                <input
+                  type="checkbox"
+                  checked={checklist[todayDate]?.diet || false}
+                  onChange={() => handleToggleDiet(d.id)}
+                  style={{
+                    width: "18px",
+                    height: "18px",
+                    cursor: "pointer",
+                    accentColor: "#10b981",
+                  }}
+                />
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontWeight: 500 }}>
+                    {d.time} - {d.meal}
+                  </span>
+                </div>
+                <span style={{ color: "#3b82f6", fontWeight: 600 }}>{d.calories} cal</span>
               </div>
-              <span style={{ color: "#3b82f6", fontWeight: 600 }}>{d.calories} cal</span>
-            </div>
-          )) : <p style={{ fontSize: "12px", color: "#9ca3af" }}>No meals assigned yet</p>}
+            ))
+          ) : (
+            <p style={{ fontSize: "12px", color: "#9ca3af" }}>No meals assigned yet</p>
+          )}
         </section>
 
         {/* ✅ LOG WEIGHT - AUTO UPDATES PROGRESS */}
         <section style={sectionBox}>
           <h2 style={sectionTitle}>⚖️ Update Weight</h2>
           <div style={{ display: "flex", gap: "10px" }}>
-            <input 
-              type="number" 
-              step="0.1" 
-              value={weightInput} 
-              onChange={(e) => setWeightInput(e.target.value)} 
-              style={inputStyle} 
-              placeholder="Enter weight (kg)" 
+            <input
+              type="number"
+              step="0.1"
+              value={weightInput}
+              onChange={(e) => setWeightInput(e.target.value)}
+              style={inputStyle}
+              placeholder="Enter weight (kg)"
             />
-            <button onClick={handleUpdateWeight} style={btnMain}>{savingWeight ? "Saving..." : "Update"}</button>
+            <button 
+              onClick={handleUpdateWeight} 
+              style={btnMain}
+              disabled={savingWeight}
+            >
+              {savingWeight ? "Saving..." : "Update"}
+            </button>
           </div>
-          <p style={{ fontSize: "11px", color: "#9ca3af", marginTop: "8px" }}>💡 Updating weight will automatically recalculate your progress!</p>
+          <p style={{ fontSize: "11px", color: "#9ca3af", marginTop: "8px" }}>
+            💡 Updating weight will automatically recalculate your progress!
+          </p>
         </section>
       </main>
 
       {/* ✅ GIF ZOOM */}
-      {zoomGif && <div style={overlay} onClick={() => setZoomGif(null)}><img src={zoomGif} style={zoomedImg} /></div>}
+      {zoomGif && (
+        <div style={overlay} onClick={() => setZoomGif(null)}>
+          <img src={zoomGif} style={zoomedImg} alt="workout" />
+        </div>
+      )}
 
       {/* ✅ PASSWORD MODAL */}
       {showPasswordModal && (
         <div style={modalBg}>
           <div style={modalContent}>
-            <h3 style={{ marginBottom: "15px", fontSize: "16px", fontWeight: 700 }}>🔐 Change Password</h3>
-            <input type="password" placeholder="Old Password" style={inputStyle} value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} />
-            <input type="password" placeholder="New Password" style={{...inputStyle, marginTop: "10px"}} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-            <input type="password" placeholder="Confirm Password" style={{...inputStyle, marginTop: "10px"}} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
-            {passwordError && <p style={{color: "#ef4444", fontSize: "12px", marginTop: "8px"}}>❌ {passwordError}</p>}
+            <h3 style={{ marginBottom: "15px", fontSize: "16px", fontWeight: 700 }}>
+              🔐 Change Password
+            </h3>
+            <input
+              type="password"
+              placeholder="Old Password"
+              style={inputStyle}
+              value={oldPassword}
+              onChange={(e) => setOldPassword(e.target.value)}
+            />
+            <input
+              type="password"
+              placeholder="New Password"
+              style={{ ...inputStyle, marginTop: "10px" }}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+            <input
+              type="password"
+              placeholder="Confirm Password"
+              style={{ ...inputStyle, marginTop: "10px" }}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
+            {passwordError && (
+              <p style={{ color: "#ef4444", fontSize: "12px", marginTop: "8px" }}>
+                ❌ {passwordError}
+              </p>
+            )}
             <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
-              <button onClick={handleChangePassword} style={btnMain}>{savingPassword ? "Saving..." : "Change"}</button>
-              <button onClick={() => setShowPasswordModal(false)} style={btnSecondary}>Cancel</button>
+              <button 
+                onClick={handleChangePassword} 
+                style={btnMain}
+                disabled={savingPassword}
+              >
+                {savingPassword ? "Saving..." : "Change"}
+              </button>
+              <button onClick={() => setShowPasswordModal(false)} style={btnSecondary}>
+                Cancel
+              </button>
             </div>
           </div>
         </div>
@@ -369,52 +649,221 @@ export default function ClientDashboard() {
 // ✅ SUB COMPONENTS
 function InfoCard({ label, value, color }: any) {
   return (
-    <div style={{ background: "rgba(59, 130, 246, 0.1)", padding: "12px", borderRadius: "10px", border: `1px solid ${color}33` }}>
-      <p style={{ fontSize: "11px", color: "#9ca3af", margin: 0, marginBottom: "4px" }}>{label}</p>
-      <p style={{ fontSize: "16px", fontWeight: 700, margin: 0, color: color }}>{value}</p>
+    <div
+      style={{
+        background: "rgba(59, 130, 246, 0.1)",
+        padding: "12px",
+        borderRadius: "10px",
+        border: `1px solid ${color}33`,
+      }}
+    >
+      <p style={{ fontSize: "11px", color: "#9ca3af", margin: 0, marginBottom: "4px" }}>
+        {label}
+      </p>
+      <p style={{ fontSize: "16px", fontWeight: 700, margin: 0, color: color }}>
+        {value}
+      </p>
     </div>
   );
 }
 
 function CheckItem({ title, done, emoji, onClick, subtext }: any) {
   return (
-    <button onClick={onClick} style={{ 
-      background: done ? "linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(52, 211, 153, 0.1))" : "#1a1f2e",
-      border: `2px solid ${done ? "#10b981" : "#2d3748"}`,
-      borderRadius: "14px", 
-      padding: "16px", 
-      cursor: "pointer", 
-      display: "flex", 
-      flexDirection: "column", 
-      alignItems: "center", 
-      gap: "6px",
-      transition: "all 0.3s ease"
-    }}>
+    <button
+      onClick={onClick}
+      style={{
+        background: done
+          ? "linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(52, 211, 153, 0.1))"
+          : "#1a1f2e",
+        border: `2px solid ${done ? "#10b981" : "#2d3748"}`,
+        borderRadius: "14px",
+        padding: "16px",
+        cursor: "pointer",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: "6px",
+        transition: "all 0.3s ease",
+      }}
+    >
       <span style={{ fontSize: "24px" }}>{emoji}</span>
       <span style={{ fontSize: "13px", fontWeight: 700 }}>{title}</span>
       <span style={{ fontSize: "10px", color: "#9ca3af" }}>{subtext}</span>
-      <span style={{ fontSize: "11px", color: done ? "#10b981" : "#4b5563", fontWeight: 500 }}>{done ? "✓ Completed" : "⏳ Pending"}</span>
+      <span
+        style={{
+          fontSize: "11px",
+          color: done ? "#10b981" : "#4b5563",
+          fontWeight: 500,
+        }}
+      >
+        {done ? "✓ Completed" : "⏳ Pending"}
+      </span>
     </button>
   );
 }
 
 // ✅ STYLES
-const headerStyle = { padding: "20px 16px", background: "#1a1f2e", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #2d3748" };
-const btnSecondary = { background: "none", border: "1.5px solid #3b82f6", color: "#3b82f6", padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, cursor: "pointer" };
-const btnDanger = { background: "none", border: "1.5px solid #ef4444", color: "#ef4444", padding: "6px 12px", borderRadius: "8px", fontSize: "12px", fontWeight: 600, cursor: "pointer" };
-const sectionBox = { background: "#1a1f2e", padding: "16px", borderRadius: "16px", marginBottom: "16px", border: "1px solid #2d3748" };
-const sectionTitle = { fontSize: "12px", color: "#9ca3af", fontWeight: 700, textTransform: "uppercase" as "uppercase", marginBottom: "12px", letterSpacing: "0.5px" };
-const progressBarBg = { width: "100%", height: "12px", background: "#0f1419", borderRadius: "10px", overflow: "hidden" };
-const progressBarFill = { height: "100%", borderRadius: "10px", transition: "width 0.5s ease" };
-const dayTabActive = { background: "linear-gradient(90deg, #3b82f6, #60a5fa)", color: "#fff", border: "none", padding: "8px 14px", borderRadius: "8px", fontSize: "12px", fontWeight: 700, cursor: "pointer" };
-const dayTabInactive = { background: "#0f1419", color: "#9ca3af", border: "1px solid #2d3748", padding: "8px 14px", borderRadius: "8px", fontSize: "12px", cursor: "pointer" };
-const workoutRow = { display: "flex", alignItems: "center", gap: "12px", background: "#0f1419", padding: "12px", borderRadius: "12px", marginBottom: "10px", cursor: "pointer", transition: "all 0.2s" };
-const thumbStyle = { width: "55px", height: "55px", borderRadius: "10px", objectFit: "cover" as "cover" };
-const dietRowWithCheckbox = { display: "flex", alignItems: "center", gap: "10px", padding: "10px 0", borderBottom: "1px solid #ffffff08", fontSize: "13px" };
-const inputStyle = { flex: 1, padding: "12px", background: "#0f1419", border: "1.5px solid #2d3748", color: "white", borderRadius: "10px", fontSize: "13px" };
-const btnMain = { background: "linear-gradient(90deg, #3b82f6, #60a5fa)", color: "#fff", border: "none", padding: "10px 20px", borderRadius: "10px", fontWeight: 700, cursor: "pointer", transition: "all 0.2s" };
-const overlay = { position: "fixed" as "fixed", top: 0, left: 0, width: "100%", height: "100%", background: "rgba(0,0,0,0.95)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 };
-const zoomedImg = { maxWidth: "90%", maxHeight: "80vh", borderRadius: "20px" };
-const loaderStyle = { minHeight: "100vh", background: "#0f1419", display: "flex", justifyContent: "center", alignItems: "center", color: "#9ca3af", fontSize: "16px" };
-const modalBg = { position: "fixed" as "fixed", top: 0, left: 0, width: "100%", height: "100%", background: "rgba(0,0,0,0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1001 };
-const modalContent = { background: "#1a1f2e", padding: "24px", borderRadius: "16px", width: "90%", maxWidth: "400px", border: "1px solid #2d3748" };
+const headerStyle = {
+  padding: "20px 16px",
+  background: "#1a1f2e",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  borderBottom: "2px solid #2d3748",
+};
+const btnSecondary = {
+  background: "none",
+  border: "1.5px solid #3b82f6",
+  color: "#3b82f6",
+  padding: "6px 12px",
+  borderRadius: "8px",
+  fontSize: "12px",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+const btnDanger = {
+  background: "none",
+  border: "1.5px solid #ef4444",
+  color: "#ef4444",
+  padding: "6px 12px",
+  borderRadius: "8px",
+  fontSize: "12px",
+  fontWeight: 600,
+  cursor: "pointer",
+};
+const sectionBox = {
+  background: "#1a1f2e",
+  padding: "16px",
+  borderRadius: "16px",
+  marginBottom: "16px",
+  border: "1px solid #2d3748",
+};
+const sectionTitle = {
+  fontSize: "12px",
+  color: "#9ca3af",
+  fontWeight: 700,
+  textTransform: "uppercase" as "uppercase",
+  marginBottom: "12px",
+  letterSpacing: "0.5px",
+};
+const progressBarBg = {
+  width: "100%",
+  height: "12px",
+  background: "#0f1419",
+  borderRadius: "10px",
+  overflow: "hidden",
+};
+const progressBarFill = {
+  height: "100%",
+  borderRadius: "10px",
+  transition: "width 0.5s ease",
+};
+const dayTabActive = {
+  background: "linear-gradient(90deg, #3b82f6, #60a5fa)",
+  color: "#fff",
+  border: "none",
+  padding: "8px 14px",
+  borderRadius: "8px",
+  fontSize: "12px",
+  fontWeight: 700,
+  cursor: "pointer",
+};
+const dayTabInactive = {
+  background: "#0f1419",
+  color: "#9ca3af",
+  border: "1px solid #2d3748",
+  padding: "8px 14px",
+  borderRadius: "8px",
+  fontSize: "12px",
+  cursor: "pointer",
+};
+const workoutRow = {
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+  background: "#0f1419",
+  padding: "12px",
+  borderRadius: "12px",
+  marginBottom: "10px",
+  cursor: "pointer",
+  transition: "all 0.2s",
+};
+const thumbStyle = {
+  width: "55px",
+  height: "55px",
+  borderRadius: "10px",
+  objectFit: "cover" as "cover",
+};
+const dietRowWithCheckbox = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  padding: "10px 0",
+  borderBottom: "1px solid #ffffff08",
+  fontSize: "13px",
+};
+const inputStyle = {
+  flex: 1,
+  padding: "12px",
+  background: "#0f1419",
+  border: "1.5px solid #2d3748",
+  color: "white",
+  borderRadius: "10px",
+  fontSize: "13px",
+};
+const btnMain = {
+  background: "linear-gradient(90deg, #3b82f6, #60a5fa)",
+  color: "#fff",
+  border: "none",
+  padding: "10px 20px",
+  borderRadius: "10px",
+  fontWeight: 700,
+  cursor: "pointer",
+  transition: "all 0.2s",
+};
+const overlay = {
+  position: "fixed" as "fixed",
+  top: 0,
+  left: 0,
+  width: "100%",
+  height: "100%",
+  background: "rgba(0,0,0,0.95)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 1000,
+};
+const zoomedImg = {
+  maxWidth: "90%",
+  maxHeight: "80vh",
+  borderRadius: "20px",
+};
+const loaderStyle = {
+  minHeight: "100vh",
+  background: "#0f1419",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  color: "#9ca3af",
+  fontSize: "16px",
+};
+const modalBg = {
+  position: "fixed" as "fixed",
+  top: 0,
+  left: 0,
+  width: "100%",
+  height: "100%",
+  background: "rgba(0,0,0,0.85)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 1001,
+};
+const modalContent = {
+  background: "#1a1f2e",
+  padding: "24px",
+  borderRadius: "16px",
+  width: "90%",
+  maxWidth: "400px",
+  border: "1px solid #2d3748",
+};

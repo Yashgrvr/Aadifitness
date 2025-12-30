@@ -19,6 +19,14 @@ export async function GET(
       );
     }
 
+    // ✅ Validate ObjectId format
+    if (!id.match(/^[a-f\d]{24}$/i) && id.length !== 24) {
+      return NextResponse.json(
+        { error: "Invalid client ID format" },
+        { status: 400 }
+      );
+    }
+
     const client = await prisma.client.findUnique({
       where: { id },
       include: { workouts: true, diets: true },
@@ -52,10 +60,19 @@ export async function POST(
       );
     }
 
+    // ✅ Validate ObjectId format
+    if (!id.match(/^[a-f\d]{24}$/i) && id.length !== 24) {
+      return NextResponse.json(
+        { error: "Invalid client ID format" },
+        { status: 400 }
+      );
+    }
+
     const body = await req.json();
     const {
       action,
       currentWeight,
+      initialWeight,
       goalWeight,
       progress,
       plan,
@@ -88,7 +105,27 @@ export async function POST(
       return NextResponse.json({ client: updatedClient });
     }
 
-    // ✅ 2. Only weight update
+    // ✅ 2. Update initial weight
+    if (action === "updateInitialWeight") {
+      if (initialWeight === undefined) {
+        return NextResponse.json(
+          { error: "Initial weight is required" },
+          { status: 400 }
+        );
+      }
+
+      const updatedClient = await prisma.client.update({
+        where: { id },
+        data: { 
+          initialWeight: Number(initialWeight),
+        },
+        include: { workouts: true, diets: true },
+      });
+
+      return NextResponse.json({ client: updatedClient });
+    }
+
+    // ✅ 3. Only current weight update
     if (action === "updateWeight") {
       if (currentWeight === undefined) {
         return NextResponse.json(
@@ -106,7 +143,7 @@ export async function POST(
       return NextResponse.json({ client: updatedClient });
     }
 
-    // ✅ 3. Daily checklist update (Json field)
+    // ✅ 4. Daily checklist update (Json field)
     if (action === "updateChecklist") {
       if (!date || !checklist) {
         return NextResponse.json(
@@ -115,10 +152,9 @@ export async function POST(
         );
       }
 
-      // 🔴 JsonValue typing ko bypass karne ka simple way
       const clientAny = client as any;
       const existing: Record<string, any> =
-        (clientAny.checklist as Record<string, any>) || {};
+        (clientAny.checklistItems as Record<string, any>) || {};
 
       existing[date] = checklist;
 
