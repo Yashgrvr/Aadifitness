@@ -37,21 +37,37 @@ interface Client {
   sessionsTotal: number;
 }
 
-// ✅ FIXED: Consistent day names
-const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
+// Days
+const DAYS = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
 type DayName = (typeof DAYS)[number];
+
+// Checklist type: date -> { workouts: {workoutId: bool}, diets: {dietId: bool} }
+type Checklist = Record<
+  string,
+  {
+    workouts: Record<string, boolean>;
+    diets: Record<string, boolean>;
+  }
+>;
 
 export default function ClientDashboard() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [clientData, setClientData] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
-  
-  // ✅ FIXED: Full day names + active date tracking
+
   const [activeDayView, setActiveDayView] = useState<DayName>("Monday");
   const [activeDate, setActiveDate] = useState("");
-  
-  const [checklist, setChecklist] = useState<Record<string, { workout: boolean; diet: boolean }>>({});
+
+  const [checklist, setChecklist] = useState<Checklist>({});
   const [weightInput, setWeightInput] = useState("");
   const [initialWeightInput, setInitialWeightInput] = useState("");
   const [savingWeight, setSavingWeight] = useState(false);
@@ -64,10 +80,17 @@ export default function ClientDashboard() {
   const [passwordError, setPasswordError] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
 
-  // ✅ FIXED: Helper to get exact date for any weekday
+  // Helper to ensure date entry exists
+  const ensureDate = (date: string, data: Checklist) => {
+    if (!data[date]) {
+      data[date] = { workouts: {}, diets: {} };
+    }
+  };
+
+  // Helper: exact date for weekday
   const getISODateForWeekdayInCurrentWeek = (targetDay: DayName): string => {
     const now = new Date();
-    const todayIdx = now.getDay(); // 0=Sun ... 6=Sat
+    const todayIdx = now.getDay();
     const targetIdx = DAYS.indexOf(targetDay);
     const diff = targetIdx - todayIdx;
     const d = new Date(now);
@@ -75,17 +98,17 @@ export default function ClientDashboard() {
     return d.toISOString().split("T")[0];
   };
 
-  // ✅ Persistent checklist save
-  const saveChecklist = (checklistData: Record<string, { workout: boolean; diet: boolean }>) => {
-    localStorage.setItem("client_checklist_backup", JSON.stringify(checklistData));
+  // Save checklist
+  const saveChecklist = (data: Checklist) => {
+    localStorage.setItem("client_checklist_backup", JSON.stringify(data));
   };
 
-  // ✅ Load checklist backup
+  // Load checklist
   const loadChecklistBackup = () => {
     const backup = localStorage.getItem("client_checklist_backup");
     if (backup) {
       try {
-        const parsed = JSON.parse(backup);
+        const parsed: Checklist = JSON.parse(backup);
         setChecklist(parsed);
         return parsed;
       } catch (err) {
@@ -96,10 +119,11 @@ export default function ClientDashboard() {
   };
 
   useEffect(() => {
-    // ✅ FIXED: Always use FULL day name
-    const todayName = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date()) as DayName;
+    const todayName = new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+    }).format(new Date()) as DayName;
     const todayISO = new Date().toISOString().split("T")[0];
-    
+
     setActiveDayView(todayName);
     setActiveDate(todayISO);
 
@@ -117,7 +141,7 @@ export default function ClientDashboard() {
     if (clientId) fetchClientData(clientId);
   }, [router]);
 
-  // ✅ Fetch client data
+  // Fetch client data + checklist
   const fetchClientData = async (clientId: string) => {
     try {
       const res = await fetch(`/api/clients/${clientId}`);
@@ -134,13 +158,21 @@ export default function ClientDashboard() {
         setWeightInput(String(client.currentWeight || 0));
         setInitialWeightInput(String(client.initialWeight || 0));
 
+        // load checklist rows
         const cRes = await fetch(`/api/clients/${clientId}/checklist`);
         if (cRes.ok) {
           const cData: any[] = await cRes.json();
-          const map: any = {};
+          const map: Checklist = {};
           cData.forEach((item) => {
-            if (!map[item.date]) map[item.date] = { workout: false, diet: false };
-            map[item.date][item.type] = item.completed;
+            if (!map[item.date]) {
+              map[item.date] = { workouts: {}, diets: {} };
+            }
+            if (item.type === "workout" && item.workoutId) {
+              map[item.date].workouts[item.workoutId] = item.completed;
+            }
+            if (item.type === "diet" && item.dietId) {
+              map[item.date].diets[item.dietId] = item.completed;
+            }
           });
           setChecklist(map);
         }
@@ -154,7 +186,7 @@ export default function ClientDashboard() {
     }
   };
 
-  // ✅ Weight progress calculation
+  // Weight progress calculation
   const calculateWeightProgress = () => {
     if (!clientData) return 0;
 
@@ -162,7 +194,8 @@ export default function ClientDashboard() {
     const currentWeight = clientData.currentWeight;
     const goalWeight = clientData.goalWeight;
 
-    if (initialWeight === 0 || goalWeight === 0 || initialWeight === goalWeight) return 0;
+    if (initialWeight === 0 || goalWeight === 0 || initialWeight === goalWeight)
+      return 0;
 
     if (initialWeight > goalWeight) {
       const totalToLose = initialWeight - goalWeight;
@@ -175,7 +208,7 @@ export default function ClientDashboard() {
     }
   };
 
-  // ✅ Weekly Workout Completion
+  // Weekly completion (per day: any workout done)
   const getWeeklyProgress = () => {
     const weeks = 7;
     let completed = 0;
@@ -183,27 +216,39 @@ export default function ClientDashboard() {
       const date = new Date();
       date.setDate(date.getDate() - i);
       const dateStr = date.toISOString().split("T")[0];
-      if (checklist[dateStr]?.workout) completed++;
+      const dayChecks = checklist[dateStr];
+      if (dayChecks && Object.values(dayChecks.workouts || {}).some(Boolean)) {
+        completed++;
+      }
     }
     return { completed, total: weeks };
   };
 
-  // ✅ FIXED: Consistent day name matching
-  const filteredWorkouts = clientData?.workouts?.filter((w) =>
-    (w.day || "").toLowerCase() === activeDayView.toLowerCase()
-  ) || [];
+  // Filter workouts and diets by active day
+  const filteredWorkouts =
+    clientData?.workouts?.filter(
+      (w) => (w.day || "").toLowerCase() === activeDayView.toLowerCase()
+    ) || [];
 
   const filteredDiets = clientData?.diets || [];
 
-  // ✅ FIXED: Use activeDate instead of todayDate
-  const handleToggleWorkout = async (workoutId: string) => {
+  // Universal toggle
+  const handleToggleItem = async (itemId: string, type: "workout" | "diet") => {
     const clientId = localStorage.getItem("clientId");
-    if (!clientId) return;
+    if (!clientId || !itemId) return;
 
-    const newChecklist = { ...checklist };
-    if (!newChecklist[activeDate]) newChecklist[activeDate] = { workout: false, diet: false };
+    const newChecklist: Checklist = { ...checklist };
+    ensureDate(activeDate, newChecklist);
 
-    newChecklist[activeDate].workout = !newChecklist[activeDate].workout;
+    if (type === "workout") {
+      const current =
+        newChecklist[activeDate].workouts[itemId] ?? false;
+      newChecklist[activeDate].workouts[itemId] = !current;
+    } else {
+      const current = newChecklist[activeDate].diets[itemId] ?? false;
+      newChecklist[activeDate].diets[itemId] = !current;
+    }
+
     setChecklist(newChecklist);
     saveChecklist(newChecklist);
 
@@ -212,10 +257,14 @@ export default function ClientDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          date: activeDate,  // ✅ FIXED
-          type: "workout",
-          completed: newChecklist[activeDate].workout,
-          workoutId,
+          date: activeDate,
+          type,
+          workoutId: type === "workout" ? itemId : undefined,
+          dietId: type === "diet" ? itemId : undefined,
+          completed:
+            type === "workout"
+              ? newChecklist[activeDate].workouts[itemId]
+              : newChecklist[activeDate].diets[itemId],
         }),
       });
     } catch (err) {
@@ -223,35 +272,7 @@ export default function ClientDashboard() {
     }
   };
 
-  // ✅ FIXED: Use activeDate instead of todayDate
-  const handleToggleDiet = async (dietId: string) => {
-    const clientId = localStorage.getItem("clientId");
-    if (!clientId) return;
-
-    const newChecklist = { ...checklist };
-    if (!newChecklist[activeDate]) newChecklist[activeDate] = { workout: false, diet: false };
-
-    newChecklist[activeDate].diet = !newChecklist[activeDate].diet;
-    setChecklist(newChecklist);
-    saveChecklist(newChecklist);
-
-    try {
-      await fetch(`/api/clients/${clientId}/checklist`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: activeDate,  // ✅ FIXED
-          type: "diet",
-          completed: newChecklist[activeDate].diet,
-          dietId,
-        }),
-      });
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  // ✅ Set initial weight
+  // Set initial weight
   const handleSetInitialWeight = async () => {
     const clientId = localStorage.getItem("clientId");
     if (!clientId || !clientData || !initialWeightInput) return;
@@ -288,7 +309,7 @@ export default function ClientDashboard() {
     }
   };
 
-  // ✅ Update current weight
+  // Update current weight
   const handleUpdateWeight = async () => {
     const clientId = localStorage.getItem("clientId");
     if (!clientId || !clientData) return;
@@ -297,7 +318,10 @@ export default function ClientDashboard() {
       const res = await fetch(`/api/clients/${clientId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "updateWeight", currentWeight: parseFloat(weightInput) }),
+        body: JSON.stringify({
+          action: "updateWeight",
+          currentWeight: parseFloat(weightInput),
+        }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -308,7 +332,11 @@ export default function ClientDashboard() {
           goalWeight: updated.goalWeight || 0,
           initialWeight: updated.initialWeight || 0,
         });
-        alert("🎉 Weight Updated! Your progress is: " + calculateWeightProgress() + "%");
+        alert(
+          "🎉 Weight Updated! Your progress is: " +
+            calculateWeightProgress() +
+            "%"
+        );
       }
     } finally {
       setSavingWeight(false);
@@ -345,7 +373,16 @@ export default function ClientDashboard() {
 
   const weightProgress = calculateWeightProgress();
   const weeklyProgress = getWeeklyProgress();
-  const showInitialWeightForm = !clientData?.initialWeight || clientData.initialWeight === 0;
+  const showInitialWeightForm =
+    !clientData?.initialWeight || clientData.initialWeight === 0;
+
+  // Summary counts
+  const completedWorkoutsCount = filteredWorkouts.filter(
+    (w) => checklist[activeDate]?.workouts?.[w.id]
+  ).length;
+  const completedDietsCount = filteredDiets.filter(
+    (d) => checklist[activeDate]?.diets?.[d.id]
+  ).length;
 
   return (
     <div
@@ -355,7 +392,7 @@ export default function ClientDashboard() {
         color: "#e5e7eb",
       }}
     >
-      {/* ✅ WELCOME HEADER */}
+      {/* HEADER */}
       <header style={headerStyle}>
         <div>
           <h1
@@ -370,7 +407,13 @@ export default function ClientDashboard() {
           >
             💪 Welcome, {name}!
           </h1>
-          <p style={{ fontSize: "12px", color: "#9ca3af", margin: "4px 0 0 0" }}>
+          <p
+            style={{
+              fontSize: "12px",
+              color: "#9ca3af",
+              margin: "4px 0 0 0",
+            }}
+          >
             Keep grinding! Your transformation starts here 🚀
           </p>
         </div>
@@ -393,11 +436,23 @@ export default function ClientDashboard() {
       </header>
 
       <main style={{ padding: "16px", maxWidth: "900px", margin: "0 auto" }}>
-        {/* ✅ INITIAL WEIGHT SETUP */}
+        {/* INITIAL WEIGHT */}
         {showInitialWeightForm && (
-          <section style={{ ...sectionBox, background: "rgba(16, 185, 129, 0.1)", border: "2px solid #10b981" }}>
+          <section
+            style={{
+              ...sectionBox,
+              background: "rgba(16, 185, 129, 0.1)",
+              border: "2px solid #10b981",
+            }}
+          >
             <h2 style={sectionTitle}>🎯 Set Your Starting Weight</h2>
-            <p style={{ fontSize: "12px", color: "#9ca3af", marginBottom: "12px" }}>
+            <p
+              style={{
+                fontSize: "12px",
+                color: "#9ca3af",
+                marginBottom: "12px",
+              }}
+            >
               💡 Your starting weight is crucial to track real progress!
             </p>
             <div style={{ display: "flex", gap: "12px" }}>
@@ -409,8 +464,8 @@ export default function ClientDashboard() {
                 onChange={(e) => setInitialWeightInput(e.target.value)}
                 style={inputStyle}
               />
-              <button 
-                onClick={handleSetInitialWeight} 
+              <button
+                onClick={handleSetInitialWeight}
                 style={btnMain}
                 disabled={savingInitialWeight}
               >
@@ -420,16 +475,25 @@ export default function ClientDashboard() {
           </section>
         )}
 
-        {/* ✅ GOAL & PROGRESS SECTION */}
+        {/* PROGRESS SECTION */}
         <section style={sectionBox}>
           <h2 style={sectionTitle}>📈 Your Transformation Journey</h2>
 
-          {/* Progress towards goal */}
+          {/* Goal Progress */}
           <div style={{ marginBottom: "20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-              <span style={{ fontSize: "13px", fontWeight: 600 }}>Goal Progress: {weightProgress}%</span>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                marginBottom: "8px",
+              }}
+            >
+              <span style={{ fontSize: "13px", fontWeight: 600 }}>
+                Goal Progress: {weightProgress}%
+              </span>
               <span style={{ fontSize: "12px", color: "#9ca3af" }}>
-                {clientData?.currentWeight || 0}kg → {clientData?.goalWeight || 0}kg
+                {clientData?.currentWeight || 0}kg →{" "}
+                {clientData?.goalWeight || 0}kg
               </span>
             </div>
             <div style={progressBarBg}>
@@ -441,7 +505,13 @@ export default function ClientDashboard() {
                 }}
               ></div>
             </div>
-            <p style={{ fontSize: "11px", color: "#9ca3af", margin: "8px 0 0 0" }}>
+            <p
+              style={{
+                fontSize: "11px",
+                color: "#9ca3af",
+                margin: "8px 0 0 0",
+              }}
+            >
               {weightProgress === 0
                 ? "⏳ Set initial weight to start tracking!"
                 : weightProgress < 50
@@ -453,51 +523,90 @@ export default function ClientDashboard() {
           </div>
 
           {/* Weekly Workouts */}
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: "8px",
+            }}
+          >
             <span style={{ fontSize: "13px", fontWeight: 600 }}>
-              Weekly Workouts: {weeklyProgress.completed}/{weeklyProgress.total}
+              Weekly Workouts: {weeklyProgress.completed}/
+              {weeklyProgress.total}
             </span>
             <span style={{ fontSize: "12px", color: "#10b981" }}>
-              🔥 {Math.round((weeklyProgress.completed / weeklyProgress.total) * 100)}% Complete
+              🔥{" "}
+              {Math.round(
+                (weeklyProgress.completed / weeklyProgress.total) * 100
+              )}
+              % Complete
             </span>
           </div>
           <div style={progressBarBg}>
             <div
               style={{
                 ...progressBarFill,
-                width: `${(weeklyProgress.completed / weeklyProgress.total) * 100}%`,
+                width: `${
+                  (weeklyProgress.completed / weeklyProgress.total) * 100
+                }%`,
                 background: "linear-gradient(90deg, #10b981, #34d399)",
               }}
             ></div>
           </div>
 
-          {/* ✅ 3 CARDS */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px", marginTop: "16px" }}>
-            <InfoCard label="Initial Weight" value={`${clientData?.initialWeight || 0}kg`} color="#9ca3af" />
-            <InfoCard label="Current Weight" value={`${clientData?.currentWeight || 0}kg`} color="#3b82f6" />
-            <InfoCard label="Goal Weight" value={`${clientData?.goalWeight || 0}kg`} color="#10b981" />
+          {/* 3 cards */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr",
+              gap: "12px",
+              marginTop: "16px",
+            }}
+          >
+            <InfoCard
+              label="Initial Weight"
+              value={`${clientData?.initialWeight || 0}kg`}
+              color="#9ca3af"
+            />
+            <InfoCard
+              label="Current Weight"
+              value={`${clientData?.currentWeight || 0}kg`}
+              color="#3b82f6"
+            />
+            <InfoCard
+              label="Goal Weight"
+              value={`${clientData?.goalWeight || 0}kg`}
+              color="#10b981"
+            />
           </div>
         </section>
 
-        {/* ✅ DAILY CHECKLIST - FIXED */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "16px" }}>
+        {/* DAILY SUMMARY CARDS */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "12px",
+            marginBottom: "16px",
+          }}
+        >
           <CheckItem
             title="Workouts"
-            done={checklist[activeDate]?.workout || false}
+            done={completedWorkoutsCount === filteredWorkouts.length && filteredWorkouts.length > 0}
             emoji="🏋️"
-            onClick={() => handleToggleWorkout(filteredWorkouts[0]?.id || "")}
-            subtext={filteredWorkouts.length + " exercises"}
+            onClick={() => {}}
+            subtext={`${completedWorkoutsCount}/${filteredWorkouts.length} Done`}
           />
           <CheckItem
             title="Diet Plan"
-            done={checklist[activeDate]?.diet || false}
+            done={completedDietsCount === filteredDiets.length && filteredDiets.length > 0}
             emoji="🥗"
-            onClick={() => handleToggleDiet(filteredDiets[0]?.id || "")}
-            subtext={filteredDiets.length + " meals"}
+            onClick={() => {}}
+            subtext={`${completedDietsCount}/${filteredDiets.length} Done`}
           />
         </div>
 
-        {/* ✅ WEEKLY WORKOUTS - FIXED TABS */}
+        {/* WEEKLY WORKOUTS */}
         <section style={sectionBox}>
           <h2 style={sectionTitle}>📅 Weekly Workouts</h2>
           <div
@@ -514,7 +623,7 @@ export default function ClientDashboard() {
                 key={day}
                 onClick={() => {
                   setActiveDayView(day);
-                  setActiveDate(getISODateForWeekdayInCurrentWeek(day)); // ✅ FIXED
+                  setActiveDate(getISODateForWeekdayInCurrentWeek(day));
                 }}
                 style={activeDayView === day ? dayTabActive : dayTabInactive}
               >
@@ -523,71 +632,117 @@ export default function ClientDashboard() {
             ))}
           </div>
           {filteredWorkouts.length > 0 ? (
-            filteredWorkouts.map((w) => (
-              <div
-                key={w.id}
-                style={workoutRow}
-                onClick={() => w.gifUrl && setZoomGif(w.gifUrl)}
-              >
-                <input
-                  type="checkbox"
-                  checked={checklist[activeDate]?.workout || false}  // ✅ FIXED
-                  onChange={() => handleToggleWorkout(w.id)}
-                  style={{
-                    width: "18px",
-                    height: "18px",
-                    cursor: "pointer",
-                    accentColor: "#3b82f6",
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-                <img src={w.gifUrl || "/placeholder.png"} style={thumbStyle} alt={w.exercise} />
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontWeight: 600, fontSize: "14px" }}>{w.exercise}</p>
-                  <p style={{ fontSize: "12px", color: "#9ca3af" }}>
-                    {w.sets} Sets × {w.reps} Reps {w.weight && `@ ${w.weight}kg`}
-                  </p>
+            filteredWorkouts.map((w) => {
+              const completed =
+                checklist[activeDate]?.workouts?.[w.id] || false;
+              return (
+                <div
+                  key={w.id}
+                  style={workoutRow}
+                  onClick={() => w.gifUrl && setZoomGif(w.gifUrl)}
+                >
+                  <input
+                    type="checkbox"
+                    checked={completed}
+                    onChange={() => handleToggleItem(w.id, "workout")}
+                    style={{
+                      width: "18px",
+                      height: "18px",
+                      cursor: "pointer",
+                      accentColor: "#3b82f6",
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <img
+                    src={w.gifUrl || "/placeholder.png"}
+                    style={thumbStyle}
+                    alt={w.exercise}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <p
+                      style={{
+                        fontWeight: 600,
+                        fontSize: "14px",
+                        color: completed ? "#64748b" : "#e5e7eb",
+                      }}
+                    >
+                      {w.exercise}
+                    </p>
+                    <p
+                      style={{
+                        fontSize: "12px",
+                        color: completed ? "#4b5563" : "#9ca3af",
+                      }}
+                    >
+                      {w.sets} Sets × {w.reps} Reps{" "}
+                      {w.weight && `@ ${w.weight}kg`}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           ) : (
-            <p style={{ textAlign: "center", color: "#4b5563", padding: "20px" }}>
+            <p
+              style={{
+                textAlign: "center",
+                color: "#4b5563",
+                padding: "20px",
+              }}
+            >
               🛏️ Keep Growing your Workout will be Updated Tomorrow
             </p>
           )}
         </section>
 
-        {/* ✅ MEAL PLAN - FIXED */}
+        {/* MEAL PLAN */}
         <section style={sectionBox}>
           <h2 style={sectionTitle}>🥗 Today's Meal Plan</h2>
           {clientData?.diets && clientData.diets.length > 0 ? (
-            clientData.diets.map((d) => (
-              <div key={d.id} style={dietRowWithCheckbox}>
-                <input
-                  type="checkbox"
-                  checked={checklist[activeDate]?.diet || false}  // ✅ FIXED
-                  onChange={() => handleToggleDiet(d.id)}
-                  style={{
-                    width: "18px",
-                    height: "18px",
-                    cursor: "pointer",
-                    accentColor: "#10b981",
-                  }}
-                />
-                <div style={{ flex: 1 }}>
-                  <span style={{ fontWeight: 500 }}>
-                    {d.time} - {d.meal}
+            clientData.diets.map((d) => {
+              const completed =
+                checklist[activeDate]?.diets?.[d.id] || false;
+              return (
+                <div key={d.id} style={dietRowWithCheckbox}>
+                  <input
+                    type="checkbox"
+                    checked={completed}
+                    onChange={() => handleToggleItem(d.id, "diet")}
+                    style={{
+                      width: "18px",
+                      height: "18px",
+                      cursor: "pointer",
+                      accentColor: "#10b981",
+                    }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <span
+                      style={{
+                        fontWeight: 500,
+                        color: completed ? "#64748b" : "#e5e7eb",
+                      }}
+                    >
+                      {d.time} - {d.meal}
+                    </span>
+                  </div>
+                  <span
+                    style={{
+                      color: completed ? "#1d4ed8" : "#3b82f6",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {d.calories} cal
                   </span>
                 </div>
-                <span style={{ color: "#3b82f6", fontWeight: 600 }}>{d.calories} cal</span>
-              </div>
-            ))
+              );
+            })
           ) : (
-            <p style={{ fontSize: "12px", color: "#9ca3af" }}>No meals assigned yet</p>
+            <p style={{ fontSize: "12px", color: "#9ca3af" }}>
+              No meals assigned yet
+            </p>
           )}
         </section>
 
-        {/* ✅ LOG WEIGHT */}
+        {/* WEIGHT UPDATE */}
         <section style={sectionBox}>
           <h2 style={sectionTitle}>⚖️ Update Weight</h2>
           <div style={{ display: "flex", gap: "10px" }}>
@@ -599,31 +754,44 @@ export default function ClientDashboard() {
               style={inputStyle}
               placeholder="Enter weight (kg)"
             />
-            <button 
-              onClick={handleUpdateWeight} 
+            <button
+              onClick={handleUpdateWeight}
               style={btnMain}
               disabled={savingWeight}
             >
               {savingWeight ? "Saving..." : "Update"}
             </button>
           </div>
-          <p style={{ fontSize: "11px", color: "#9ca3af", marginTop: "8px" }}>
+          <p
+            style={{
+              fontSize: "11px",
+              color: "#9ca3af",
+              marginTop: "8px",
+            }}
+          >
             💡 Updating weight will automatically recalculate your progress!
           </p>
         </section>
       </main>
 
-      {/* ✅ GIF ZOOM & PASSWORD MODAL - SAME AS BEFORE */}
+      {/* GIF ZOOM */}
       {zoomGif && (
         <div style={overlay} onClick={() => setZoomGif(null)}>
           <img src={zoomGif} style={zoomedImg} alt="workout" />
         </div>
       )}
 
+      {/* PASSWORD MODAL */}
       {showPasswordModal && (
         <div style={modalBg}>
           <div style={modalContent}>
-            <h3 style={{ marginBottom: "15px", fontSize: "16px", fontWeight: 700 }}>
+            <h3
+              style={{
+                marginBottom: "15px",
+                fontSize: "16px",
+                fontWeight: 700,
+              }}
+            >
               🔐 Change Password
             </h3>
             <input
@@ -648,19 +816,34 @@ export default function ClientDashboard() {
               onChange={(e) => setConfirmPassword(e.target.value)}
             />
             {passwordError && (
-              <p style={{ color: "#ef4444", fontSize: "12px", marginTop: "8px" }}>
+              <p
+                style={{
+                  color: "#ef4444",
+                  fontSize: "12px",
+                  marginTop: "8px",
+                }}
+              >
                 ❌ {passwordError}
               </p>
             )}
-            <div style={{ display: "flex", gap: "10px", marginTop: "20px" }}>
-              <button 
-                onClick={handleChangePassword} 
+            <div
+              style={{
+                display: "flex",
+                gap: "10px",
+                marginTop: "20px",
+              }}
+            >
+              <button
+                onClick={handleChangePassword}
                 style={btnMain}
                 disabled={savingPassword}
               >
                 {savingPassword ? "Saving..." : "Change"}
               </button>
-              <button onClick={() => setShowPasswordModal(false)} style={btnSecondary}>
+              <button
+                onClick={() => setShowPasswordModal(false)}
+                style={btnSecondary}
+              >
                 Cancel
               </button>
             </div>
@@ -671,7 +854,7 @@ export default function ClientDashboard() {
   );
 }
 
-// ✅ SUB COMPONENTS & STYLES - SAME AS BEFORE
+// Sub components
 function InfoCard({ label, value, color }: any) {
   return (
     <div
@@ -682,10 +865,24 @@ function InfoCard({ label, value, color }: any) {
         border: `1px solid ${color}33`,
       }}
     >
-      <p style={{ fontSize: "11px", color: "#9ca3af", margin: 0, marginBottom: "4px" }}>
+      <p
+        style={{
+          fontSize: "11px",
+          color: "#9ca3af",
+          margin: 0,
+          marginBottom: "4px",
+        }}
+      >
         {label}
       </p>
-      <p style={{ fontSize: "16px", fontWeight: 700, margin: 0, color: color }}>
+      <p
+        style={{
+          fontSize: "16px",
+          fontWeight: 700,
+          margin: 0,
+          color: color,
+        }}
+      >
         {value}
       </p>
     </div>
@@ -727,7 +924,7 @@ function CheckItem({ title, done, emoji, onClick, subtext }: any) {
   );
 }
 
-// ✅ STYLES (unchanged)
+// Styles
 const headerStyle = {
   padding: "20px 16px",
   background: "#1a1f2e",
