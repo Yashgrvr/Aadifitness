@@ -48,9 +48,9 @@ export async function POST(req: NextRequest) {
     };
 
     const planAmountMap: Record<string, number> = {
-      "1_month": 100,
-      "3_months": 249900,
-      "6_months": 449900,
+      "1_": 100,
+      "3_s": 249900,
+      "6_s": 449900,
     };
 
     const subscriptionEndDate = new Date();

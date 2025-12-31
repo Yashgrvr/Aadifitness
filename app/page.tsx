@@ -356,7 +356,7 @@ export default function HomePage() {
           }}
         >
           <h3 style={{ margin: "0 0 16px 0", fontSize: 18, fontWeight: 700, color: "#e0e7ff" }}>
-            🏢 Titanium Fitness
+            🏢 ViBration Fitness
           </h3>
           
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, alignItems: "center" }}>
@@ -366,7 +366,7 @@ export default function HomePage() {
                 A-1/10, 4th Floor
               </p>
               <p style={{ fontSize: 13, color: "#cbd5e1", margin: 0 }}>
-                Sector 8, Noida
+                Sector 8, Delhi
               </p>
             </div>
             
@@ -409,7 +409,7 @@ export default function HomePage() {
             © {new Date().getFullYear()} FitVibs
           </p>
           <p style={{ margin: 0, fontSize: 12, color: "#64748b" }}>
-            Powered by Titanium Fitness
+            Powered by ViBrations Fitness
           </p>
         </div>
         
@@ -426,7 +426,7 @@ export default function HomePage() {
             </p>
             <p style={{ fontSize: 14, color: "#e0e7ff", margin: 0 }}>
               A-1/10, 4th Floor<br/>
-              Sector 8, Noida
+              Sector 8, Delhi
             </p>
           </div>
           

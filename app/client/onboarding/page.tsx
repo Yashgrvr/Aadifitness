@@ -30,13 +30,13 @@ export default function ClientOnboarding() {
     typeof window !== "undefined" ? localStorage.getItem("clientId") : "";
 
   const planAmounts: Record<string, number> = {
-    "1_month": 100,
+    "1_month": 99900,
     "3_months": 249900,
     "6_months": 449900,
   };
 
   const planPrices: Record<string, string> = {
-    "1_month": "₹1",
+    "1_month": "₹999",
     "3_months": "₹2,499",
     "6_months": "₹4,499",
   };
