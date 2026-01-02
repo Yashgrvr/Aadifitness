@@ -26,8 +26,8 @@ export default function ClientOnboarding() {
   const [plan, setPlan] = useState("1_month");
   const [paymentProcessing, setPaymentProcessing] = useState(false);
 
-  const clientId =
-    typeof window !== "undefined" ? localStorage.getItem("clientId") : "";
+  // ✅ FIXED: State for clientId instead of direct localStorage read
+  const [clientId, setClientId] = useState<string | null>(null);
 
   const planAmounts: Record<string, number> = {
     "1_month": 99900,
@@ -41,6 +41,16 @@ export default function ClientOnboarding() {
     "6_months": "₹4,499",
   };
 
+  // ✅ FIXED: Clear old clientId on mount (first load only)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      // Clear any old clientId from previous user
+      localStorage.removeItem("clientId");
+      setClientId(null);
+    }
+  }, []);
+
+  // ✅ Load Razorpay script
   useEffect(() => {
     if (step === 3) {
       const script = document.createElement("script");
@@ -53,24 +63,29 @@ export default function ClientOnboarding() {
     }
   }, [step]);
 
+  // ✅ FIXED: Step 1 - Create new client with firstName & lastName
   const handleSaveDetails = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
     try {
-      if (!email || !currentWeight || !goalWeight) {
-        throw new Error("Email and weights are required");
+      if (!email || !firstName || !lastName || !currentWeight || !goalWeight) {
+        throw new Error("All fields are required");
       }
 
+      // ✅ CRITICAL: Always send null clientId on first step to create NEW record
       const response = await fetch("/api/clients/save-details", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId,
+          clientId: null, // ← ALWAYS null on Step 1 (new client)
           email,
+          firstName, // ← Send firstName
+          lastName, // ← Send lastName
           currentWeight: parseFloat(currentWeight),
           goalWeight: parseFloat(goalWeight),
+          initialWeight: parseFloat(currentWeight), // Initial = Current at registration
           fitnessGoal: "weight_loss",
         }),
       });
@@ -81,8 +96,10 @@ export default function ClientOnboarding() {
         throw new Error(data.message || "Failed to save details");
       }
 
-      if (data.clientId && !clientId) {
+      // ✅ Store fresh clientId from response
+      if (data.clientId) {
         localStorage.setItem("clientId", data.clientId);
+        setClientId(data.clientId);
       }
 
       setStep(2);
@@ -93,26 +110,31 @@ export default function ClientOnboarding() {
     }
   };
 
-  // UPDATED: Fetches fresh ID from localStorage to avoid "Email already in use" error
+  // ✅ FIXED: Step 2 - Update with fitness goal using fresh clientId
   const handleGoalsAndPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
     try {
+      // ✅ Get fresh clientId from localStorage (set in step 1)
       const currentClientId = localStorage.getItem("clientId");
+
+      if (!currentClientId) {
+        throw new Error("Client ID not found. Please start over.");
+      }
 
       const response = await fetch("/api/clients/save-details", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId: currentClientId, 
+          clientId: currentClientId,
           email,
           firstName,
           lastName,
           currentWeight: parseFloat(currentWeight),
           goalWeight: parseFloat(goalWeight),
-          fitnessGoal,
+          fitnessGoal, // ← Updated fitness goal
         }),
       });
 
@@ -130,14 +152,19 @@ export default function ClientOnboarding() {
     }
   };
 
-  // UPDATED: Fetches fresh ID from localStorage for Razorpay order creation
+  // ✅ FIXED: Step 3 - Payment with fresh clientId
   const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setPaymentProcessing(true);
 
     try {
+      // ✅ Get fresh clientId from localStorage
       const currentClientId = localStorage.getItem("clientId");
+
+      if (!currentClientId) {
+        throw new Error("Client ID not found. Please start over.");
+      }
 
       const orderResponse = await fetch("/api/payment/create-order", {
         method: "POST",
@@ -192,7 +219,9 @@ export default function ClientOnboarding() {
             setSuccess(true);
             setError("");
 
+            // ✅ Clear clientId after successful payment
             setTimeout(() => {
+              localStorage.removeItem("clientId");
               router.push("/client/dashboard");
             }, 3000);
           } catch (err) {
@@ -224,7 +253,7 @@ export default function ClientOnboarding() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-black">
-      {/* Background and Form UI remains exactly as you had it */}
+      {/* Background blobs */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob" />
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000" />
@@ -250,6 +279,7 @@ export default function ClientOnboarding() {
 
         {!success && (
           <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-black rounded-2xl shadow-2xl overflow-hidden border border-blue-500/20 backdrop-blur-sm">
+            {/* Header */}
             <div className="bg-gradient-to-r from-blue-600 to-cyan-500 p-8 relative overflow-hidden">
               <div className="absolute inset-0 opacity-10">
                 <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-transparent" />
@@ -264,6 +294,7 @@ export default function ClientOnboarding() {
               </div>
             </div>
 
+            {/* Progress Bar */}
             <div className="px-8 py-6 border-b border-blue-500/10">
               <div className="flex justify-between mb-3">
                 <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
@@ -278,12 +309,14 @@ export default function ClientOnboarding() {
               </div>
             </div>
 
+            {/* Error Message */}
             {error && (
               <div className="mx-8 mt-6 p-4 bg-red-950/50 border border-red-500/50 text-red-300 rounded-xl text-sm backdrop-blur-sm">
                 ⚠️ {error}
               </div>
             )}
 
+            {/* Form */}
             <form className="px-8 py-8 space-y-6">
               {step === 1 && (
                 <div className="space-y-6 animate-fadeIn">
@@ -316,6 +349,7 @@ export default function ClientOnboarding() {
                         onChange={(e) => setFirstName(e.target.value)}
                         placeholder="John"
                         className="w-full px-4 py-3 bg-slate-800 border border-blue-500/30 text-white placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                        required
                       />
                     </div>
                     <div>
@@ -328,6 +362,7 @@ export default function ClientOnboarding() {
                         onChange={(e) => setLastName(e.target.value)}
                         placeholder="Doe"
                         className="w-full px-4 py-3 bg-slate-800 border border-blue-500/30 text-white placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+                        required
                       />
                     </div>
                   </div>

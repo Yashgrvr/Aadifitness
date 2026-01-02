@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Fitvibs",
-  description: "get fit With Aadi",
+  description: "Get fit With Aadi a personalized fitness app",
 };
 
 export default function RootLayout({

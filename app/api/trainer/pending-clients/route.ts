@@ -25,12 +25,12 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // yahan sirf woh fields lo jo Client model me exist karte hain
+    // Prisma query mein fitnessGoal aur createdAt ko select karein
     const pendingClients = await prisma.client.findMany({
       where: {
         trainerId,
         paymentStatus: "completed",
-        password: null,
+        password: null, // Jab tak password null hai, tab tak client pending rahega
       },
       select: {
         id: true,
@@ -38,19 +38,21 @@ export async function GET(req: NextRequest) {
         email: true,
         currentWeight: true,
         goalWeight: true,
+        fitnessGoal: true, // ✅ Plan ki jagah fitnessGoal select karein
         plan: true,
-        // paymentDate nahi hai to hata diya
-        // passwordGeneratedAt bhi agar model me nahi hai to hata do
+        createdAt: true,   // ✅ Payment date ke liye createdAt select karein
       },
       orderBy: {
-        createdAt: "desc", // paymentDate ki jagah createdAt se sort
+        createdAt: "desc",
       },
     });
 
     const formattedClients = pendingClients.map((client) => ({
       ...client,
-      fitnessGoal: client.plan, // temporary mapping
-      paymentDate: new Date().toISOString(), // dummy, UI ke liye
+      // ✅ FIX: client.plan ki jagah asli fitnessGoal mapping use karein
+      fitnessGoal: client.fitnessGoal || "Weight Loss", 
+      // ✅ FIX: Dummy date ki jagah database se asli date (createdAt) dikhayein
+      paymentDate: client.createdAt, 
       passwordGeneratedAt: null,
     }));
 

@@ -9,6 +9,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { clientId, orderId, paymentId, signature, plan } = body;
 
+    // 1. Basic Validation
     if (!clientId || !orderId || !paymentId || !signature || !plan) {
       return NextResponse.json(
         { success: false, message: "Missing required fields" },
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Verify Razorpay signature
+    // 2. Razorpay signature verify karein
     const razorpaySecret = process.env.RAZORPAY_KEY_SECRET || "";
     const expectedSignature = crypto
       .createHmac("sha256", razorpaySecret)
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Update Payment record
+    // 3. Update Payment record aur usey variable mein save karein
     const payment = await prisma.payment.update({
       where: { razorpayOrderId: orderId },
       data: {
@@ -40,32 +41,24 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Update Client subscription status
-    const planDurationMap: Record<string, number> = {
-      "1_month": 30,
-      "3_months": 90,
-      "6_months": 180,
-    };
-
-    const planAmountMap: Record<string, number> = {
-      "1_": 100,
-      "3_s": 249900,
-      "6_s": 449900,
-    };
-
+    // 4. Subscription End Date calculate karein
+    // payment record se planDuration uthayein jo create-order mein save kiya tha
+    const planDuration = payment.planDuration || 30; 
     const subscriptionEndDate = new Date();
-    subscriptionEndDate.setDate(
-      subscriptionEndDate.getDate() + (planDurationMap[plan] || 30)
-    );
+    subscriptionEndDate.setDate(subscriptionEndDate.getDate() + planDuration);
 
+    // 5. Client record update karein aur Payment ke saath LINK karein
     await prisma.client.update({
       where: { id: clientId },
       data: {
         paymentStatus: "completed",
         subscriptionDate: new Date(),
         subscriptionEndDate,
-        planAmount: planAmountMap[plan] || 0,
+        // Manual map ki jagah direct payment record ka amount use karein
+        planAmount: payment.amount, 
         plan,
+        // CRITICAL: Dono tables ko aapas mein link karne ke liye
+        paymentId: payment.id, 
       },
     });
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
+// Fallback ID agar frontend se trainerId na aaye
 const DEFAULT_TRAINER_ID = "693177322d42beddadbf04e4";
 
 function isValidEmail(email: string): boolean {
@@ -17,9 +18,11 @@ export async function POST(req: NextRequest) {
       email,
       currentWeight,
       goalWeight,
+      initialWeight, // Frontend se naya field
       firstName,
       lastName,
       fitnessGoal,
+      trainerId, // Frontend se dynamic trainerId ka support
     } = body;
 
     // 1. Basic Validation
@@ -39,6 +42,8 @@ export async function POST(req: NextRequest) {
 
     const cw = Number(currentWeight);
     const gw = Number(goalWeight);
+    const iw = initialWeight ? Number(initialWeight) : cw;
+
     if (Number.isNaN(cw) || Number.isNaN(gw) || cw < 1 || cw > 300 || gw < 1 || gw > 300) {
       return NextResponse.json(
         { success: false, message: "Weights must be between 1 and 300 kg" },
@@ -54,7 +59,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Updated Email Duplicate Check
+    // 2. Email Duplicate Check (Updated logic)
     const cleanClientId = typeof clientId === "string" && clientId.trim().length > 0
       ? clientId.trim()
       : null;
@@ -62,7 +67,6 @@ export async function POST(req: NextRequest) {
     const existingByEmail = await prisma.client.findFirst({
       where: {
         email: email,
-        // Agar current client update kar raha hai toh use ignore karein
         NOT: cleanClientId ? { id: cleanClientId } : undefined,
       },
     });
@@ -79,7 +83,7 @@ export async function POST(req: NextRequest) {
     const fullName = [firstName, lastName].filter((x) => x && x.trim().length > 0).join(" ") || "New Client";
 
     if (cleanClientId) {
-      // Update existing client
+      // ✅ UPDATE: Existing client ka data update karein
       client = await prisma.client.update({
         where: { id: cleanClientId },
         data: {
@@ -91,13 +95,14 @@ export async function POST(req: NextRequest) {
         },
       });
     } else {
-      // Create new client
+      // ✅ CREATE: Naya client banayein (Password: null taaki pending mein dikhe)
       client = await prisma.client.create({
         data: {
           name: fullName,
           email,
-          password: null,
+          password: null, // Critical for "Pending" status
           currentWeight: cw,
+          initialWeight: iw, // Registration ke waqt ka weight save karein
           goalWeight: gw,
           fitnessGoal: fitnessGoal as any,
           plan: "onboarding",
@@ -109,7 +114,7 @@ export async function POST(req: NextRequest) {
           planAmount: 0,
           credentialsSent: false,
           trainer: {
-            connect: { id: DEFAULT_TRAINER_ID },
+            connect: { id: trainerId || DEFAULT_TRAINER_ID },
           },
         },
       });

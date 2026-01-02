@@ -86,39 +86,33 @@ export default function HomePage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: "50%",
-              background: "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: 28,
-              boxShadow: "0 8px 32px rgba(59,130,246,0.4), inset 0 1px 0 rgba(255,255,255,0.1)",
-            }}
-          >
-            💪
-          </div>
-          <div>
-            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 950, letterSpacing: -0.8 }}>
-              FitVibs
-            </h1>
-            <p
-              style={{
-                margin: 0,
-                fontSize: 10,
-                color: "#3b82f6",
-                letterSpacing: 2,
-                textTransform: "uppercase",
-                fontWeight: 600,
-              }}
-            >
-              Training Platform
-            </p>
-          </div>
-        </div>
+          <img
+    src="/logo.png"  // tumhara naya logo [file:353]
+    alt="FitVibs"
+    style={{
+      width: 90,
+      height: 70,
+      borderRadius: "50%",
+      objectFit: "cover"
+    }}
+  />
+  
+  <div>
+    <h1 style={{ margin: 0, fontSize: 30, fontWeight: 950, letterSpacing: -0.8 }}>
+      FitVibs
+    </h1>
+    <p style={{
+      margin: 0,
+      fontSize: 15,
+      color: "#3b82f6",
+      letterSpacing: 2,
+      textTransform: "uppercase",
+      fontWeight: 600,
+    }}>
+      Training Platform
+    </p>
+  </div>
+</div>
 
         <button
           onClick={() => router.push("/login")}
