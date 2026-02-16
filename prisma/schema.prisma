@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+model Trainer {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  name     String
+  email    String @unique
+  password String
+  gymName  String
+  upiId    String
+
+  clients  Client[]
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum FitnessGoal {
+  weight_loss
+  muscle_gain
+  maintenance
+  strength
+}
+
+model Client {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  name                String
+  email               String    @unique
+  password            String?
+  passwordGeneratedAt DateTime?
+  passwordExpiresAt   DateTime?
+  currentWeight       Float
+  initialWeight       Float?    
+  goalWeight          Float
+  fitnessGoal         FitnessGoal?
+  plan                String
+  progress            Int
+  sessionsCompleted   Int
+  sessionsTotal       Int
+  paymentStatus       String    @default("pending")
+  subscriptionDate    DateTime?
+  subscriptionEndDate DateTime?
+  planDuration        Int       @default(30)
+  planAmount          Int       @default(0)
+  credentialsSent     Boolean   @default(false)
+  workouts            Workout[]
+  diets               Diet[]
+  checklist           Json?
+  trainerId           String    @db.ObjectId
+  trainer             Trainer   @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  payment             Payment?  @relation(fields: [paymentId], references: [id])
+  paymentId           String?   @db.ObjectId
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  checklistItems      ChecklistItem[]
+}
+
+model Payment {
+  id                String   @id @default(auto()) @map("_id") @db.ObjectId
+  razorpayOrderId   String   @unique
+  razorpayPaymentId String? 
+  razorpaySignature String? 
+  
+  amount            Int      
+  currency          String   @default("INR")
+  status            String   @default("pending") 
+  clientEmail       String
+  clientName        String
+  
+  planDuration      Int      @default(30) 
+  notes             String?
+
+  trainerId         String   @db.ObjectId
+  trainer           Trainer  @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  
+  clients           Client[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// ⬇️ WORKOUT MODEL UPDATED HERE ⬇️
+model Workout {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  exercise String
+  sets     String
+  reps     String
+  weight   String? // Isse optional rakha hai bodyweight exercises ke liye
+
+  // ✅ Nayi fields jo humne add ki hain:
+  gifUrl   String? // Cloudinary GIF link ke liye
+  day      String? // Monday, Tuesday, etc. save karne ke liye
+
+  clientId String @db.ObjectId
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model Diet {
+  id       String @id @default(auto()) @map("_id") @db.ObjectId
+  time     String
+  meal     String
+  calories Int
+
+  clientId String @db.ObjectId
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+model ChecklistItem {
+  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  date      String
+  type      String  @default("workout") 
+  itemId    String
+  completed Boolean @default(false)
+
+  clientId String @db.ObjectId
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, date, type, itemId])
+}
