@@ -8,8 +8,7 @@ const prisma = new PrismaClient();
 const DEFAULT_TRAINER_ID = "693177322d42beddadbf04e4";
 
 const planAmounts: Record<string, number> = {
-  "1_month": 99900
-  ,
+  "1_month": 99900,
   "3_months": 249900,
   "6_months": 449900,
 };

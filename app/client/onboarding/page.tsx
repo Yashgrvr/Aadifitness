@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from "framer-motion";
 
 declare global {
   interface Window {
@@ -9,48 +10,60 @@ declare global {
   }
 }
 
+// Premium Motivational Quotes
+const QUOTES = [
+  "The body achieves what the mind believes.",
+  "Elite results require elite planning.",
+  "Your only competition is who you were yesterday.",
+  "Great things never come from comfort zones."
+];
+
 export default function ClientOnboarding() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const [quoteIndex, setQuoteIndex] = useState(0);
 
+  // Form States
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [currentWeight, setCurrentWeight] = useState("");
   const [goalWeight, setGoalWeight] = useState("");
-
   const [fitnessGoal, setFitnessGoal] = useState("weight_loss");
   const [plan, setPlan] = useState("1_month");
   const [paymentProcessing, setPaymentProcessing] = useState(false);
 
-  // ✅ FIXED: State for clientId instead of direct localStorage read
-  const [clientId, setClientId] = useState<string | null>(null);
+  // Mouse move effect for background
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+  const springX = useSpring(mouseX, { stiffness: 50, damping: 20 });
+  const springY = useSpring(mouseY, { stiffness: 50, damping: 20 });
+  const moveX = useTransform(springX, [0, 1000], [-20, 20]);
+  const moveY = useTransform(springY, [0, 1000], [-20, 20]);
 
-  const planAmounts: Record<string, number> = {
-    "1_month": 99900,
-    "3_months": 249900,
-    "6_months": 449900,
-  };
+  const planAmounts: Record<string, number> = { "1_month": 99900, "3_months": 249900, "6_months": 449900 };
+  const planPrices: Record<string, string> = { "1_month": "₹999", "3_months": "₹2,499", "6_months": "₹4,499" };
 
-  const planPrices: Record<string, string> = {
-    "1_month": "₹999",
-    "3_months": "₹2,499",
-    "6_months": "₹4,499",
-  };
-
-  // ✅ FIXED: Clear old clientId on mount (first load only)
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      // Clear any old clientId from previous user
-      localStorage.removeItem("clientId");
-      setClientId(null);
-    }
+    const handleMouseMove = (e: MouseEvent) => {
+      mouseX.set(e.clientX);
+      mouseY.set(e.clientY);
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    const quoteInterval = setInterval(() => setQuoteIndex((p) => (p + 1) % QUOTES.length), 5000);
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      clearInterval(quoteInterval);
+    };
+  }, [mouseX, mouseY]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.removeItem("clientId");
   }, []);
 
-  // ✅ Load Razorpay script
   useEffect(() => {
     if (step === 3) {
       const script = document.createElement("script");
@@ -58,546 +71,274 @@ export default function ClientOnboarding() {
       script.async = true;
       document.body.appendChild(script);
       return () => {
-        document.body.removeChild(script);
+        const existing = document.querySelector('script[src*="razorpay"]');
+        if (existing) document.body.removeChild(existing);
       };
     }
   }, [step]);
 
-  // ✅ FIXED: Step 1 - Create new client with firstName & lastName
   const handleSaveDetails = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email || !firstName || !lastName || !currentWeight || !goalWeight) {
+      setError("Please complete your profile to continue.");
+      return;
+    }
     setError("");
     setLoading(true);
-
     try {
-      if (!email || !firstName || !lastName || !currentWeight || !goalWeight) {
-        throw new Error("All fields are required");
-      }
-
-      // ✅ CRITICAL: Always send null clientId on first step to create NEW record
       const response = await fetch("/api/clients/save-details", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clientId: null, // ← ALWAYS null on Step 1 (new client)
-          email,
-          firstName, // ← Send firstName
-          lastName, // ← Send lastName
+          clientId: null,
+          email, firstName, lastName,
           currentWeight: parseFloat(currentWeight),
           goalWeight: parseFloat(goalWeight),
-          initialWeight: parseFloat(currentWeight), // Initial = Current at registration
+          initialWeight: parseFloat(currentWeight),
           fitnessGoal: "weight_loss",
         }),
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to save details");
-      }
-
-      // ✅ Store fresh clientId from response
-      if (data.clientId) {
-        localStorage.setItem("clientId", data.clientId);
-        setClientId(data.clientId);
-      }
-
+      if (!response.ok) throw new Error(data.message);
+      if (data.clientId) localStorage.setItem("clientId", data.clientId);
       setStep(2);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+    } catch (err: any) {
+      setError(err.message || "An error occurred");
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ FIXED: Step 2 - Update with fitness goal using fresh clientId
   const handleGoalsAndPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     setLoading(true);
-
     try {
-      // ✅ Get fresh clientId from localStorage (set in step 1)
-      const currentClientId = localStorage.getItem("clientId");
-
-      if (!currentClientId) {
-        throw new Error("Client ID not found. Please start over.");
-      }
-
-      const response = await fetch("/api/clients/save-details", {
+      const cid = localStorage.getItem("clientId");
+      const res = await fetch("/api/clients/save-details", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId: currentClientId,
-          email,
-          firstName,
-          lastName,
-          currentWeight: parseFloat(currentWeight),
-          goalWeight: parseFloat(goalWeight),
-          fitnessGoal, // ← Updated fitness goal
-        }),
+        body: JSON.stringify({ clientId: cid, email, firstName, lastName, currentWeight, goalWeight, fitnessGoal }),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to update goals");
-      }
-
+      if (!res.ok) throw new Error();
       setStep(3);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+    } catch {
+      setError("Could not update goals. Try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ FIXED: Step 3 - Payment with fresh clientId
   const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
     setPaymentProcessing(true);
-
     try {
-      // ✅ Get fresh clientId from localStorage
-      const currentClientId = localStorage.getItem("clientId");
-
-      if (!currentClientId) {
-        throw new Error("Client ID not found. Please start over.");
-      }
-
-      const orderResponse = await fetch("/api/payment/create-order", {
+      const cid = localStorage.getItem("clientId");
+      const orderRes = await fetch("/api/payment/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId: currentClientId,
-          plan,
-          amount: planAmounts[plan],
-        }),
+        body: JSON.stringify({ clientId: cid, plan, amount: planAmounts[plan] }),
       });
-
-      const orderData = await orderResponse.json();
-
-      if (!orderResponse.ok) {
-        throw new Error(orderData.message || "Failed to create order");
-      }
-
-      const { orderId } = orderData;
-
+      const orderData = await orderRes.json();
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY,
-        order_id: orderId,
+        order_id: orderData.orderId,
         amount: planAmounts[plan],
         currency: "INR",
-        name: "Aadi Fitness",
-        description: `${plan.replace("_", " ")} subscription`,
-        prefill: {
-          email,
-        },
-        handler: async (response: any) => {
-          try {
-            const verifyResponse = await fetch("/api/payment/verify", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                clientId: currentClientId,
-                orderId: response.razorpay_order_id,
-                paymentId: response.razorpay_payment_id,
-                signature: response.razorpay_signature,
-                plan,
-              }),
-            });
-
-            const verifyData = await verifyResponse.json();
-
-            if (!verifyResponse.ok) {
-              throw new Error(
-                verifyData.message || "Payment verification failed"
-              );
-            }
-
-            setSuccess(true);
-            setError("");
-
-            // ✅ Clear clientId after successful payment
-            setTimeout(() => {
-              localStorage.removeItem("clientId");
-              router.push("/client/dashboard");
-            }, 3000);
-          } catch (err) {
-            setError(
-              err instanceof Error ? err.message : "Verification failed"
-            );
-          }
-        },
-        modal: {
-          ondismiss: () => {
-            setPaymentProcessing(false);
-            setError("Payment cancelled");
-          },
-        },
+        name: "FitVibs Elite",
+        description: `${plan.replace("_", " ")} Membership`,
+        handler: () => { setSuccess(true); setTimeout(() => router.push("/client/dashboard"), 3000); },
+        theme: { color: "#10b981" }
       };
-
-      const rzp = new window.Razorpay(options);
-      rzp.open();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Payment setup failed");
+      new (window as any).Razorpay(options).open();
+    } catch {
+      setError("Payment failed to initialize.");
     } finally {
       setPaymentProcessing(false);
     }
   };
 
-  const handlePreviousStep = () => {
-    if (step > 1) setStep(step - 1);
-  };
+  const progressPercent = useMemo(() => Math.round((step / 3) * 100), [step]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-black">
-      {/* Background blobs */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 bg-blue-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000" />
-        <div className="absolute top-1/2 left-1/2 w-80 h-80 bg-cyan-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000" />
-      </div>
+    <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center p-4 relative overflow-hidden font-sans">
+      
+      {/* Dynamic Background Blobs */}
+      <motion.div style={{ x: moveX, y: moveY }} className="absolute top-[-10%] left-[-10%] w-[60%] h-[60%] bg-emerald-500/10 rounded-full blur-[120px]" />
+      <motion.div style={{ x: moveY, y: moveX }} className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[60%] bg-emerald-900/20 rounded-full blur-[120px]" />
 
-      <div className="w-full max-w-md relative z-10">
-        {success && (
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 border border-blue-500/30 rounded-2xl shadow-2xl p-8 mb-4 text-center backdrop-blur-sm">
-            <div className="text-6xl mb-4">✅</div>
-            <h2 className="text-3xl font-bold text-white mb-3">
-              Payment Successful!
-            </h2>
-            <p className="text-gray-300 mb-4 text-lg">
-              Your subscription is active. Your trainer will send you a
-              password shortly.
-            </p>
-            <p className="text-sm text-blue-400">
-              Redirecting to dashboard...
-            </p>
+      <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-2xl relative z-10">
+        
+        {/* Elite Badge */}
+        <div className="flex justify-center mb-8">
+          <div className="bg-emerald-500/10 border border-emerald-500/20 px-4 py-1.5 rounded-full flex items-center gap-2 backdrop-blur-md">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">Join 500+ Elite Members</span>
           </div>
-        )}
+        </div>
 
-        {!success && (
-          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-black rounded-2xl shadow-2xl overflow-hidden border border-blue-500/20 backdrop-blur-sm">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-cyan-500 p-8 relative overflow-hidden">
-              <div className="absolute inset-0 opacity-10">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-transparent" />
-              </div>
-              <div className="relative z-10">
-                <h1 className="text-4xl font-bold text-white mb-2">
-                  Aadi Fitness
-                </h1>
-                <p className="text-blue-100 text-lg">
-                  Complete Your Registration
-                </p>
-              </div>
+        {/* Glassmorphism Card */}
+        <div className="bg-white/5 backdrop-blur-3xl border border-white/10 shadow-[0_32px_128px_rgba(0,0,0,0.4)] rounded-[3rem] overflow-hidden">
+          
+          {/* Enhanced Progress Header */}
+          <div className="px-10 pt-10 pb-6 flex items-center justify-between border-b border-white/5">
+            <div>
+              <h1 className="text-3xl font-black italic tracking-tighter">FitVibs</h1>
+              <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest mt-1">Exclusive Onboarding</p>
             </div>
-
-            {/* Progress Bar */}
-            <div className="px-8 py-6 border-b border-blue-500/10">
-              <div className="flex justify-between mb-3">
-                <span className="text-xs font-semibold text-blue-400 uppercase tracking-wider">
-                  Step {step} of 3
-                </span>
-              </div>
-              <div className="w-full bg-slate-700 rounded-full h-2.5 overflow-hidden">
-                <div
-                  className="bg-gradient-to-r from-blue-500 to-cyan-400 h-2.5 rounded-full transition-all duration-300 shadow-lg shadow-blue-500/50"
-                  style={{ width: `${(step / 3) * 100}%` }}
-                />
-              </div>
+            <div className="text-right">
+              <p className="text-emerald-400 text-2xl font-black">{progressPercent}%</p>
+              <p className="text-white/40 text-[9px] font-bold uppercase tracking-widest">To Transformation</p>
             </div>
-
-            {/* Error Message */}
-            {error && (
-              <div className="mx-8 mt-6 p-4 bg-red-950/50 border border-red-500/50 text-red-300 rounded-xl text-sm backdrop-blur-sm">
-                ⚠️ {error}
-              </div>
-            )}
-
-            {/* Form */}
-            <form className="px-8 py-8 space-y-6">
-              {step === 1 && (
-                <div className="space-y-6 animate-fadeIn">
-                  <h2 className="text-2xl font-bold text-white mb-8">
-                    Personal Details
-                  </h2>
-
-                  <div>
-                    <label className="block text-sm font-semibold text-blue-300 mb-3">
-                      Email Address
-                    </label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="your@email.com"
-                      className="w-full px-4 py-3 bg-slate-800 border border-blue-500/30 text-white placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                      required
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-blue-300 mb-3">
-                        First Name
-                      </label>
-                      <input
-                        type="text"
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        placeholder="John"
-                        className="w-full px-4 py-3 bg-slate-800 border border-blue-500/30 text-white placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-blue-300 mb-3">
-                        Last Name
-                      </label>
-                      <input
-                        type="text"
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
-                        placeholder="Doe"
-                        className="w-full px-4 py-3 bg-slate-800 border border-blue-500/30 text-white placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-blue-300 mb-3">
-                        Current Weight (kg)
-                      </label>
-                      <input
-                        type="number"
-                        value={currentWeight}
-                        onChange={(e) => setCurrentWeight(e.target.value)}
-                        placeholder="85"
-                        className="w-full px-4 py-3 bg-slate-800 border border-blue-500/30 text-white placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-blue-300 mb-3">
-                        Goal Weight (kg)
-                      </label>
-                      <input
-                        type="number"
-                        value={goalWeight}
-                        onChange={(e) => setGoalWeight(e.target.value)}
-                        placeholder="75"
-                        className="w-full px-4 py-3 bg-slate-800 border border-blue-500/30 text-white placeholder-gray-500 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
-                        required
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    onClick={handleSaveDetails}
-                    disabled={loading}
-                    className="w-full mt-8 py-3 bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-bold rounded-lg hover:shadow-lg hover:shadow-blue-500/50 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? "Saving..." : "Continue to Goals"}
-                  </button>
-                </div>
-              )}
-
-              {step === 2 && (
-                <div className="space-y-6 animate-fadeIn">
-                  <h2 className="text-2xl font-bold text-white mb-8">
-                    What's Your Fitness Goal?
-                  </h2>
-
-                  <div className="space-y-3">
-                    {[
-                      {
-                        value: "weight_loss",
-                        label: "Weight Loss",
-                        emoji: "⬇️",
-                        desc: "Reduce body weight",
-                      },
-                      {
-                        value: "muscle_gain",
-                        label: "Muscle Gain",
-                        emoji: "💪",
-                        desc: "Build lean muscle",
-                      },
-                      {
-                        value: "maintenance",
-                        label: "Maintenance",
-                        emoji: "⚖️",
-                        desc: "Keep current fitness",
-                      },
-                      {
-                        value: "strength",
-                        label: "Strength",
-                        emoji: "🔥",
-                        desc: "Increase power & endurance",
-                      },
-                    ].map((option) => (
-                      <label
-                        key={option.value}
-                        className={`flex items-center p-4 rounded-xl cursor-pointer transition border-2 ${
-                          fitnessGoal === option.value
-                            ? "border-blue-500 bg-blue-500/10"
-                            : "border-blue-500/20 bg-slate-800/50 hover:border-blue-500/50"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          value={option.value}
-                          checked={fitnessGoal === option.value}
-                          onChange={(e) => setFitnessGoal(e.target.value)}
-                          className="w-5 h-5 text-blue-500"
-                        />
-                        <span className="text-2xl ml-4">{option.emoji}</span>
-                        <div className="ml-3">
-                          <p className="text-white font-semibold">
-                            {option.label}
-                          </p>
-                          <p className="text-xs text-gray-400">
-                            {option.desc}
-                          </p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      type="button"
-                      onClick={handlePreviousStep}
-                      className="flex-1 py-3 border border-blue-500/30 text-blue-400 font-semibold rounded-lg hover:bg-slate-800/50 transition"
-                    >
-                      ← Back
-                    </button>
-                    <button
-                      type="submit"
-                      onClick={handleGoalsAndPayment}
-                      disabled={loading}
-                      className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-cyan-500 text-white font-semibold rounded-lg hover:shadow-lg hover:shadow-blue-500/50 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {loading ? "Processing..." : "Choose Plan →"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {step === 3 && (
-                <div className="space-y-6 animate-fadeIn">
-                  <h2 className="text-2xl font-bold text-white mb-8">
-                    Select Your Plan
-                  </h2>
-
-                  <div className="space-y-3">
-                    {Object.entries(planAmounts).map(([planKey]) => (
-                      <label
-                        key={planKey}
-                        className={`flex items-center p-5 rounded-xl cursor-pointer transition border-2 ${
-                          plan === planKey
-                            ? "border-cyan-500 bg-cyan-500/10"
-                            : "border-blue-500/20 bg-slate-800/50 hover:border-blue-500/50"
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          value={planKey}
-                          checked={plan === planKey}
-                          onChange={(e) => setPlan(e.target.value)}
-                          className="w-5 h-5 text-cyan-500"
-                        />
-                        <div className="ml-4 flex-1">
-                          <p className="font-semibold text-white text-lg">
-                            {planKey.replace("_", " ").toUpperCase()}
-                          </p>
-                          <p className="text-xs text-gray-400">
-                            {planKey === "1_month"
-                              ? "1 month access"
-                              : planKey === "3_months"
-                              ? "3 months access"
-                              : "6 months access"}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-2xl font-bold text-cyan-400">
-                            {planPrices[planKey]}
-                          </p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-
-                  <div className="bg-blue-500/10 p-4 rounded-xl border border-blue-500/20 mt-6">
-                    <p className="text-sm text-blue-300">
-                      <span className="font-semibold">ℹ️ Note:</span> Your
-                      trainer will send you a password after payment
-                      confirmation.
-                    </p>
-                  </div>
-
-                  <div className="flex gap-3 pt-4">
-                    <button
-                      type="button"
-                      onClick={handlePreviousStep}
-                      className="flex-1 py-3 border border-blue-500/30 text-blue-400 font-semibold rounded-lg hover:bg-slate-800/50 transition"
-                    >
-                      ← Back
-                    </button>
-                    <button
-                      type="submit"
-                      onClick={handlePayment}
-                      disabled={paymentProcessing}
-                      className="flex-1 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold rounded-lg hover:shadow-lg hover:shadow-cyan-500/50 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {paymentProcessing ? "Processing..." : "Pay Now →"}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </form>
           </div>
-        )}
-      </div>
 
-      <style>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        .animate-fadeIn {
-          animation: fadeIn 0.3s ease-in-out;
-        }
+          <div className="p-10">
+            <AnimatePresence mode="wait">
+              {success ? (
+                <motion.div key="success" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center py-12">
+                  <div className="text-7xl mb-6">💎</div>
+                  <h2 className="text-4xl font-black italic mb-4">Welcome to the Club</h2>
+                  <p className="text-white/50 text-lg mb-8">Your dashboard is being personalized...</p>
+                </motion.div>
+              ) : (
+                <motion.div layout transition={{ duration: 0.5, ease: "anticipate" }}>
+                  {step === 1 && (
+                    <motion.div key="step1" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -20, opacity: 0 }} className="space-y-8">
+                      <div className="space-y-2">
+                        <h2 className="text-4xl font-extrabold tracking-tight">Crafting Your <span className="text-emerald-500">Blueprint</span></h2>
+                        <p className="text-white/40 text-sm">Every transformation starts with precision data.</p>
+                      </div>
+                      
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} className="w-full px-7 py-5 bg-white/5 border border-white/10 rounded-2xl focus:ring-2 focus:ring-emerald-500 transition-all outline-none" placeholder="First Name" />
+                        <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} className="w-full px-7 py-5 bg-white/5 border border-white/10 rounded-2xl focus:ring-2 focus:ring-emerald-500 transition-all outline-none" placeholder="Last Name" />
+                      </div>
+                      <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full px-7 py-5 bg-white/5 border border-white/10 rounded-2xl focus:ring-2 focus:ring-emerald-500 transition-all outline-none" placeholder="Elite Email Address" />
 
-        @keyframes blob {
-          0%, 100% {
-            transform: translate(0, 0) scale(1);
-          }
-          33% {
-            transform: translate(30px, -50px) scale(1.1);
-          }
-          66% {
-            transform: translate(-20px, 20px) scale(0.9);
-          }
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="relative">
+                          <input type="number" value={currentWeight} onChange={e => setCurrentWeight(e.target.value)} className="w-full px-7 py-5 bg-white/5 border border-white/10 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Current KG" />
+                          <span className="absolute right-6 top-5 text-white/20 font-bold">KG</span>
+                        </div>
+                        <div className="relative">
+                          <input type="number" value={goalWeight} onChange={e => setGoalWeight(e.target.value)} className="w-full px-7 py-5 bg-white/5 border border-white/10 rounded-2xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="Target KG" />
+                          <span className="absolute right-6 top-5 text-white/20 font-bold">KG</span>
+                        </div>
+                      </div>
+
+                      <button onClick={handleSaveDetails} disabled={loading} className="group relative w-full py-6 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-2xl overflow-hidden transition-all active:scale-[0.98]">
+                        <span className="relative z-10 uppercase tracking-widest">{loading ? "Processing..." : "Next Step →"}</span>
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-shimmer" />
+                      </button>
+                    </motion.div>
+                  )}
+
+                  {step === 2 && (
+                    <motion.div key="step2" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -20, opacity: 0 }} className="space-y-8">
+                      <div className="space-y-2">
+                        <h2 className="text-4xl font-extrabold tracking-tight">Defining Your <span className="text-emerald-500">Mission</span></h2>
+                        <p className="text-white/40 text-sm">Choose the discipline that defines your journey.</p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {[
+                          { id: "weight_loss", label: "Fat Loss", desc: "Burn & Shred", icon: "🔥" },
+                          { id: "muscle_gain", label: "Muscle Gain", desc: "Build Lean Mass", icon: "💪" },
+                          { id: "strength", label: "Strength", desc: "Power & Force", icon: "⚡" },
+                          { id: "maintenance", label: "Athletic", desc: "Health & Vitality", icon: "🏃" },
+                        ].map((g) => (
+                          <button key={g.id} type="button" onClick={() => setFitnessGoal(g.id)} className={`p-6 rounded-2xl border-2 text-left transition-all ${fitnessGoal === g.id ? "border-emerald-500 bg-emerald-500/10 shadow-[0_0_20px_rgba(16,185,129,0.2)]" : "border-white/5 bg-white/5 hover:bg-white/10"}`}>
+                            <div className="flex justify-between items-start mb-3">
+                              <span className="text-3xl">{g.icon}</span>
+                              {fitnessGoal === g.id && <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center text-[10px] text-black">✓</div>}
+                            </div>
+                            <p className="font-black text-lg">{g.label}</p>
+                            <p className="text-[10px] uppercase tracking-wider text-white/30 font-bold">{g.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex gap-4">
+                        <button type="button" onClick={() => setStep(1)} className="flex-1 py-5 text-white/40 font-bold hover:text-white transition-all">Back</button>
+                        <button onClick={handleGoalsAndPayment} className="group relative flex-[2] py-5 bg-emerald-500 text-black font-black rounded-2xl overflow-hidden transition-all active:scale-[0.98]">
+                          <span className="relative z-10 uppercase tracking-widest">Confirm Goal</span>
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-shimmer" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {step === 3 && (
+                    <motion.div key="step3" initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} className="space-y-8">
+                      <div className="space-y-2">
+                        <h2 className="text-4xl font-extrabold tracking-tight">Finalizing <span className="text-emerald-500">Access</span></h2>
+                        <p className="text-white/40 text-sm">Select your membership tier to enter the portal.</p>
+                      </div>
+
+                      <div className="space-y-4">
+                        {Object.entries(planPrices).map(([key, price]) => (
+                          <button key={key} type="button" onClick={() => setPlan(key)} className={`w-full p-7 rounded-3xl border-2 flex justify-between items-center transition-all ${plan === key ? "border-emerald-500 bg-emerald-500/10 shadow-lg" : "border-white/5 bg-white/5"}`}>
+                            <div className="text-left">
+                              <p className="text-[10px] font-black uppercase text-emerald-500 tracking-widest mb-1">{key.replace("_", " ")} Plan</p>
+                              <p className="font-bold text-xl">Full Elite Portal Access</p>
+                            </div>
+                            <span className="text-2xl font-black">{price}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="bg-emerald-500/10 p-6 rounded-[2.5rem] border border-emerald-500/20">
+                        <div className="flex justify-between items-center mb-6">
+                          <div>
+                            <p className="text-[10px] uppercase font-bold text-emerald-500">Total Investment</p>
+                            <p className="text-3xl font-black">{planPrices[plan]}</p>
+                          </div>
+                          <div className="text-right">
+                             <p className="text-[9px] font-bold text-white/30 uppercase mb-1">Secured by Razorpay</p>
+                             <div className="flex gap-2 justify-end">
+                               <span className="text-xs">🛡️</span> <span className="text-[10px] font-bold text-white/60">Guarantee</span>
+                             </div>
+                          </div>
+                        </div>
+                        <button onClick={handlePayment} disabled={paymentProcessing} className="group relative w-full py-6 bg-white text-black font-black rounded-2xl overflow-hidden transition-all active:scale-[0.98]">
+                          <span className="relative z-10 uppercase tracking-widest">{paymentProcessing ? "Opening Secure Portal..." : "Unlock My Dashboard"}</span>
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-black/5 to-transparent -translate-x-full group-hover:animate-shimmer" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Motivational Quote Footer */}
+          <div className="px-10 py-8 bg-black/40 border-t border-white/5 text-center">
+            <AnimatePresence mode="wait">
+              <motion.p key={quoteIndex} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="text-white/30 text-xs font-medium italic">
+                "{QUOTES[quoteIndex]}"
+              </motion.p>
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Global Social Proof Footer */}
+        <div className="mt-10 flex flex-wrap justify-center items-center gap-8 opacity-40 grayscale pointer-events-none">
+          <span className="text-[10px] font-black tracking-widest">CERTIFIED COACHING</span>
+          <span className="text-[10px] font-black tracking-widest">DATA ENCRYPTION</span>
+          <span className="text-[10px] font-black tracking-widest">RESULTS GUARANTEED</span>
+        </div>
+      </motion.div>
+
+      <style jsx global>{`
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
         }
-        .animate-blob {
-          animation: blob 7s infinite;
-        }
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-        .animation-delay-4000 {
-          animation-delay: 4s;
+        .animate-shimmer {
+          animation: shimmer 2s infinite linear;
         }
       `}</style>
     </div>

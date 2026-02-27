@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -51,311 +52,152 @@ export default function LoginPage() {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "linear-gradient(135deg, #0a0e27 0%, #1a1f3a 50%, #0f1423 100%)",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "center",
-        color: "white",
-        position: "relative",
-        overflow: "hidden",
-        padding: "16px",
-      }}
-    >
-      {/* Animated gradient orbs */}
-      <div
-        style={{
-          position: "absolute",
-          width: "600px",
-          height: "600px",
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(59,130,246,0.15), transparent 70%)",
-          top: "-100px",
-          right: "-100px",
-          pointerEvents: "none",
-          animation: "float 15s ease-in-out infinite",
-        }}
-      />
-      <div
-        style={{
-          position: "absolute",
-          width: "500px",
-          height: "500px",
-          borderRadius: "50%",
-          background: "radial-gradient(circle, rgba(139,92,246,0.1), transparent 70%)",
-          bottom: "-50px",
-          left: "-100px",
-          pointerEvents: "none",
-          animation: "float 18s ease-in-out infinite reverse",
-        }}
-      />
+    <div className="min-h-screen bg-[#050505] text-white flex flex-col items-center justify-center p-6 relative overflow-hidden font-sans">
+      
+      {/* Background Ambience - Emerald Blobs matching Onboarding */}
+      <div className="absolute top-[-20%] left-[-10%] w-[70%] h-[70%] bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[70%] h-[70%] bg-emerald-900/15 rounded-full blur-[120px] pointer-events-none" />
 
-      {/* Main container */}
-      <div
-        style={{
-          position: "relative",
-          zIndex: 1,
-          maxWidth: "420px",
-          width: "100%",
-        }}
+      <motion.div 
+        initial={{ opacity: 0, y: 30 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        className="w-full max-w-md relative z-10"
       >
-        {/* Card */}
-        <div
-          style={{
-            background: "linear-gradient(135deg, rgba(30,40,60,0.9), rgba(20,30,50,0.9))",
-            backdropFilter: "blur(20px)",
-            border: "1px solid rgba(59,130,246,0.3)",
-            borderRadius: 24,
-            padding: "40px 32px",
-            boxShadow: "0 25px 70px rgba(0,0,0,0.5)",
-          }}
-        >
-          {/* Header */}
-          <div style={{ marginBottom: 32, textAlign: "center" }}>
-            <div
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: "50%",
-                background: "linear-gradient(135deg, #3b82f6 0%, #1e40af 100%)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: 32,
-                margin: "0 auto 20px",
-                boxShadow: "0 16px 40px rgba(59,130,246,0.4)",
-              }}
-            >
-              💪
-            </div>
-            <h1 style={{ margin: "0 0 8px 0", fontSize: 32, fontWeight: 900, background: "linear-gradient(135deg, #60a5fa, #3b82f6)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>
+        {/* Elite Branding Badge */}
+        <div className="flex justify-center mb-10">
+          <div className="bg-emerald-500/10 border border-emerald-500/20 px-4 py-1.5 rounded-full flex items-center gap-2 backdrop-blur-md">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-400">Elite Performance Portal</span>
+          </div>
+        </div>
+
+        {/* Glassmorphism Card */}
+        <div className="bg-white/5 backdrop-blur-3xl border border-white/10 shadow-[0_32px_128px_rgba(0,0,0,0.5)] rounded-[2.5rem] p-10 relative overflow-hidden">
+          
+          <div className="text-center mb-10">
+            <h1 className="text-5xl font-black italic tracking-tighter bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent">
               FitVibs
             </h1>
-            <p style={{ margin: 0, fontSize: 16, color: "#a5b4fc" }}>
-              Sign in to continue
-            </p>
+            <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest mt-2">Welcome Back</p>
           </div>
 
-          {/* Error message */}
-          {error && (
-            <div
-              style={{
-                background: "rgba(239, 68, 68, 0.15)",
-                border: "1px solid rgba(239, 68, 68, 0.4)",
-                borderRadius: 12,
-                padding: "12px 16px",
-                marginBottom: 20,
-                fontSize: 14,
-                color: "#fca5a5",
-              }}
-            >
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleLogin} style={{ display: "grid", gap: "20px" }}>
-            {/* Email */}
-            <div>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  marginBottom: 8,
-                  color: "#e0e7ff",
-                }}
+          <form onSubmit={handleLogin} className="space-y-6">
+            
+            {/* Role Selection Tabs */}
+            <div className="flex bg-white/5 p-1 rounded-2xl border border-white/5">
+              <button
+                type="button"
+                onClick={() => setRole("trainer")}
+                className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                  role === "trainer" ? "bg-emerald-500 text-black shadow-lg" : "text-white/40 hover:text-white"
+                }`}
               >
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="your@email.com"
-                required
-                style={{
-                  width: "100%",
-                  padding: "14px 18px",
-                  background: "rgba(15,23,42,0.8)",
-                  border: "1px solid rgba(59,130,246,0.3)",
-                  borderRadius: 14,
-                  color: "white",
-                  fontSize: 15,
-                  transition: "all 0.3s ease",
-                  boxSizing: "border-box",
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = "rgba(59,130,246,0.8)";
-                  e.currentTarget.style.boxShadow = "0 0 0 4px rgba(59,130,246,0.1)";
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = "rgba(59,130,246,0.3)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              />
+                Trainer
+              </button>
+              <button
+                type="button"
+                onClick={() => setRole("client")}
+                className={`flex-1 py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                  role === "client" ? "bg-emerald-500 text-black shadow-lg" : "text-white/40 hover:text-white"
+                }`}
+              >
+                Client
+              </button>
             </div>
 
-            {/* Password */}
-            <div>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  marginBottom: 8,
-                  color: "#e0e7ff",
-                }}
-              >
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-                style={{
-                  width: "100%",
-                  padding: "14px 18px",
-                  background: "rgba(15,23,42,0.8)",
-                  border: "1px solid rgba(59,130,246,0.3)",
-                  borderRadius: 14,
-                  color: "white",
-                  fontSize: 15,
-                  transition: "all 0.3s ease",
-                  boxSizing: "border-box",
-                }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = "rgba(59,130,246,0.8)";
-                  e.currentTarget.style.boxShadow = "0 0 0 4px rgba(59,130,246,0.1)";
-                }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = "rgba(59,130,246,0.3)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              />
-            </div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-1">Email Address</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="name@email.com"
+                  required
+                  className="w-full px-6 py-4 bg-white/5 border border-white/10 rounded-2xl focus:ring-2 focus:ring-emerald-500 transition-all outline-none placeholder:text-white/10"
+                />
+              </div>
 
-            {/* Role Selection */}
-            <div>
-              <label
-                style={{
-                  display: "block",
-                  fontSize: 14,
-                  fontWeight: 600,
-                  marginBottom: 12,
-                  color: "#e0e7ff",
-                }}
-              >
-                Login As
-              </label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                {[
-                  { key: "trainer" as const, label: "🏋️ Trainer", icon: "💪" },
-                  { key: "client" as const, label: "👤 Client", icon: "👥" },
-                ].map((opt) => (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => setRole(opt.key)}
-                    style={{
-                      padding: "14px 18px",
-                      borderRadius: 14,
-                      border: role === opt.key ? "2px solid #3b82f6" : "1px solid rgba(59,130,246,0.3)",
-                      background: role === opt.key ? "rgba(59,130,246,0.2)" : "rgba(15,23,42,0.8)",
-                      color: role === opt.key ? "#60a5fa" : "#a5b4fc",
-                      fontSize: 15,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      transition: "all 0.3s ease",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                    }}
-                  >
-                    <span style={{ fontSize: 20 }}>{opt.icon}</span>
-                    {opt.label}
-                  </button>
-                ))}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-white/30 ml-1">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  className="w-full px-6 py-4 bg-white/5 border border-white/10 rounded-2xl focus:ring-2 focus:ring-emerald-500 transition-all outline-none placeholder:text-white/10"
+                />
               </div>
             </div>
 
-            {/* Login Button */}
+            <AnimatePresence>
+              {error && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }} 
+                  animate={{ opacity: 1, height: "auto" }} 
+                  className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl"
+                >
+                  <p className="text-red-400 text-xs font-bold flex items-center gap-2">
+                    <span className="text-base">⚠️</span> {error}
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <button
               type="submit"
               disabled={loading}
-              style={{
-                padding: "16px 24px",
-                borderRadius: 14,
-                border: "none",
-                background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
-                color: "white",
-                fontSize: 16,
-                fontWeight: 700,
-                cursor: loading ? "not-allowed" : "pointer",
-                transition: "all 0.3s ease",
-                boxShadow: "0 10px 25px rgba(59,130,246,0.4)",
-                opacity: loading ? 0.8 : 1,
-              }}
-              onMouseEnter={(e) => {
-                if (!loading) {
-                  e.currentTarget.style.boxShadow = "0 15px 35px rgba(59,130,246,0.5)";
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!loading) {
-                  e.currentTarget.style.boxShadow = "0 10px 25px rgba(59,130,246,0.4)";
-                  e.currentTarget.style.transform = "translateY(0)";
-                }
-              }}
+              className="group relative w-full py-5 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-2xl overflow-hidden transition-all active:scale-[0.98] shadow-[0_20px_40px_rgba(16,185,129,0.2)]"
             >
-              {loading ? "Signing In..." : "Sign In"}
+              <span className="relative z-10 uppercase tracking-widest">
+                {loading ? "Authenticating..." : "Sign In →"}
+              </span>
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] pointer-events-none" />
             </button>
           </form>
 
-          {/* Back to home */}
-          <button
-            type="button"
-            onClick={() => router.push("/")}
-            style={{
-              marginTop: 24,
-              width: "100%",
-              padding: "12px",
-              borderRadius: 12,
-              border: "1px solid rgba(59,130,246,0.3)",
-              background: "transparent",
-              color: "#60a5fa",
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: "pointer",
-              transition: "all 0.3s ease",
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = "#93c5fd";
-              e.currentTarget.style.background = "rgba(59,130,246,0.1)";
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = "#60a5fa";
-              e.currentTarget.style.background = "transparent";
-            }}
-          >
-            ← Back to Home
-          </button>
+          {/* Secondary Actions */}
+          <div className="mt-8 pt-8 border-t border-white/5 flex flex-col gap-4 items-center">
+            <button
+              type="button"
+              onClick={() => router.push("/")}
+              className="text-white/30 text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors"
+            >
+              ← Back to Home
+            </button>
+            <p className="text-white/20 text-[10px] font-bold uppercase tracking-widest">
+              Need access?{" "}
+              <button 
+                onClick={() => router.push("/client/onboarding")}
+                className="text-emerald-500 hover:underline"
+              >
+                Join the journey
+              </button>
+            </p>
+          </div>
         </div>
-      </div>
 
-      {/* CSS */}
-      <style>{`
-        @keyframes float {
-          0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-30px); }
-        }
+        {/* Global Security Footer */}
+        <div className="mt-12 flex justify-center items-center gap-6 text-[9px] font-black uppercase tracking-[0.2em] text-white/20">
+            <div className="flex items-center gap-2">
+              <span className="w-1 h-1 bg-emerald-500 rounded-full" />
+              Secure Encrypted Session
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-1 h-1 bg-emerald-500 rounded-full" />
+              Elite Support 24/7
+            </div>
+        </div>
+      </motion.div>
 
-        input::placeholder {
-          color: rgba(165, 180, 252, 0.5);
+      <style jsx global>{`
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
         }
       `}</style>
     </div>

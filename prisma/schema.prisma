@@ -86,7 +86,7 @@ model Payment {
   updatedAt         DateTime @updatedAt
 }
 
-// ⬇️ WORKOUT MODEL UPDATED HERE ⬇️
+
 model Workout {
   id       String @id @default(auto()) @map("_id") @db.ObjectId
   exercise String
@@ -94,12 +94,13 @@ model Workout {
   reps     String
   weight   String? // Isse optional rakha hai bodyweight exercises ke liye
 
-  // ✅ Nayi fields jo humne add ki hain:
+
   gifUrl   String? // Cloudinary GIF link ke liye
   day      String? // Monday, Tuesday, etc. save karne ke liye
-
+  insight  String?
   clientId String @db.ObjectId
   client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
 
   createdAt DateTime @default(now())
 }

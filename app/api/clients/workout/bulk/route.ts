@@ -1,83 +1,55 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient, Prisma } from "@prisma/client"; // ✅ Prisma import added for Types
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { clientId, weeklyData } = body;
+    const { clientId, weeklyData } = await req.json();
 
-    // 1. Basic Validation
-    if (!clientId) {
-      return NextResponse.json(
-        { success: false, message: "Client ID is required" }, 
-        { status: 400 }
-      );
-    }
+    if (!clientId) return NextResponse.json({ error: "No Client ID" }, { status: 400 });
 
-    if (!weeklyData || typeof weeklyData !== 'object') {
-      return NextResponse.json(
-        { success: false, message: "Invalid weekly data format" }, 
-        { status: 400 }
-      );
-    }
+    // ⚡ Terminal mein check karna ye log aata hai ya nahi
+    console.log("Cleaning workouts for client:", clientId);
 
-    // 2. Database Transaction (Delete old + Create new)
     const result = await prisma.$transaction(async (tx) => {
-      
-      // Purana workout saaf karein is client ke liye
-      await tx.workout.deleteMany({
-        where: { clientId: clientId },
+      // Step 1: Force Delete (Isse saara purana kachra saaf hoga)
+      const deleted = await tx.workout.deleteMany({
+        where: { clientId: String(clientId) }
       });
+      console.log(`Deleted ${deleted.count} old workouts.`);
 
-      // ✅ TypeScript Fix: Array ka type define kiya taaki error na aaye
-      const workoutsToCreate: Prisma.WorkoutCreateManyInput[] = [];
-
-      const days = Object.keys(weeklyData);
-
-      for (const day of days) {
-        const exercises = weeklyData[day];
-        
+      // Step 2: Prepare Fresh Data
+      const workoutsToCreate: any[] = [];
+      
+      Object.entries(weeklyData).forEach(([day, exercises]: [string, any]) => {
         if (Array.isArray(exercises)) {
           exercises.forEach((ex: any) => {
-            // Sirf valid exercises add karein
             if (ex.exercise && ex.exercise.trim() !== "") {
               workoutsToCreate.push({
+                clientId: String(clientId),
+                day: day,
                 exercise: ex.exercise,
                 sets: String(ex.sets || "0"),
                 reps: String(ex.reps || "0"),
                 weight: String(ex.weight || "0"),
-                gifUrl: ex.gifUrl || null,
-                day: day, // Monday, Tuesday, etc.
-                clientId: clientId,
+                gifUrl: ex.gifUrl || "",
+                insight: ex.insight || ""
               });
             }
           });
         }
-      }
+      });
 
-      // 3. Bulk Create (Agar data hai toh)
+      // Step 3: Insert only if new data exists
       if (workoutsToCreate.length > 0) {
-        return await tx.workout.createMany({
-          data: workoutsToCreate,
-        });
+        return await tx.workout.createMany({ data: workoutsToCreate });
       }
-      
-      return { count: 0 };
     });
 
-    return NextResponse.json({
-      success: true,
-      message: "Weekly workout plan updated successfully!",
-      count: result.count
-    });
-
-  } catch (error: any) {
-    console.error("BULK_SAVE_ERROR:", error);
-    return NextResponse.json(
-      { success: false, message: "Internal server error" }, 
-      { status: 500 }
-    );
+    return NextResponse.json({ success: true, message: "Cleaned and Overwritten" });
+  } catch (error) {
+    console.error("CRITICAL ERROR:", error);
+    return NextResponse.json({ error: "Sync failed" }, { status: 500 });
   }
 }
