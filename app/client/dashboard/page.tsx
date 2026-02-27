@@ -2,61 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import { LogOut, Zap, Lock, ChevronLeft, ChevronRight, CheckCircle2, Timer, Flame, Utensils, Scale, Dumbbell, X, Activity, Target, PlayCircle, Crown, CreditCard, Shield } from "lucide-react";
 
-interface Workout {
-  id: string;
-  exercise: string;
-  sets: string;
-  reps: string;
-  weight: string;
-  gifUrl?: string;
-  day?: string;
-  completed?: boolean;
-}
-
-interface Diet {
-  id: string;
-  time: string;
-  meal: string;
-  calories: number;
-  completed?: boolean;
-}
-
-interface Client {
-  id: string;
-  name: string;
-  email: string;
-  initialWeight?: number;
-  currentWeight: number;
-  goalWeight: number;
-  plan: string;
-  progress: number;
-  workouts: Workout[];
-  diets: Diet[];
-  sessionsCompleted: number;
-  sessionsTotal: number;
-}
-
-// Days
-const DAYS = [
-  "Sunday",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-] as const;
-type DayName = (typeof DAYS)[number];
-
-// Checklist type: date -> { workouts: {workoutId: bool}, diets: {dietId: bool} }
-type Checklist = Record<
-  string,
-  {
-    workouts: Record<string, boolean>;
-    diets: Record<string, boolean>;
-  }
->;
+// --- INTERFACES ---
+interface Workout { id: string; exercise: string; sets: string; reps: string; weight: string; gifUrl?: string; day?: string; insight?: string; }
+interface Diet { id: string; time: string; meal: string; calories: number; }
+interface Client { id: string; name: string; email: string; initialWeight?: number; currentWeight: number; goalWeight: number; plan: string; progress: number; workouts: Workout[]; diets: Diet[]; }
+type DayName = "Sunday" | "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday";
+const DAYS: DayName[] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+type Checklist = Record<string, { workouts: Record<string, boolean>; diets: Record<string, boolean>; }>;
 
 export default function ClientDashboard() {
   const router = useRouter();
@@ -64,15 +19,23 @@ export default function ClientDashboard() {
   const [clientData, setClientData] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Core State
   const [activeDayView, setActiveDayView] = useState<DayName>("Monday");
   const [activeDate, setActiveDate] = useState("");
-
   const [checklist, setChecklist] = useState<Checklist>({});
+
+  // Elite Player State
+  const [activeWorkoutIdx, setActiveWorkoutIdx] = useState(0);
+  const [restTimer, setRestTimer] = useState(0); 
+  const [expandedVideo, setExpandedVideo] = useState<string | null>(null);
+
+  // Update State
   const [weightInput, setWeightInput] = useState("");
   const [initialWeightInput, setInitialWeightInput] = useState("");
   const [savingWeight, setSavingWeight] = useState(false);
   const [savingInitialWeight, setSavingInitialWeight] = useState(false);
-  const [zoomGif, setZoomGif] = useState<string | null>(null);
+  
+  // Password State
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -80,1012 +43,532 @@ export default function ClientDashboard() {
   const [passwordError, setPasswordError] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
 
-  // Helper to ensure date entry exists
-  const ensureDate = (date: string, data: Checklist) => {
-    if (!data[date]) {
-      data[date] = { workouts: {}, diets: {} };
-    }
+  // --- REST TIMER LOGIC ---
+  useEffect(() => {
+    let interval: any;
+    if (restTimer > 0) interval = setInterval(() => setRestTimer((prev) => prev - 1), 1000);
+    return () => clearInterval(interval);
+  }, [restTimer]);
+
+  const formatTime = (timeInSecs: number) => {
+    const m = Math.floor(timeInSecs / 60).toString().padStart(2, "0");
+    const s = (timeInSecs % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
   };
 
-  // Helper: exact date for weekday
+  // --- CORE LOGIC ---
+  const ensureDate = (date: string, data: Checklist) => { if (!data[date]) data[date] = { workouts: {}, diets: {} }; };
   const getISODateForWeekdayInCurrentWeek = (targetDay: DayName): string => {
     const now = new Date();
-    const todayIdx = now.getDay();
-    const targetIdx = DAYS.indexOf(targetDay);
-    const diff = targetIdx - todayIdx;
-    const d = new Date(now);
-    d.setDate(now.getDate() + diff);
+    const diff = DAYS.indexOf(targetDay) - now.getDay();
+    const d = new Date(now); d.setDate(now.getDate() + diff);
     return d.toISOString().split("T")[0];
   };
 
-  // Save checklist
-  const saveChecklist = (data: Checklist) => {
-    localStorage.setItem("client_checklist_backup", JSON.stringify(data));
-  };
-
-  // Load checklist
+  const saveChecklist = (data: Checklist) => localStorage.setItem("client_checklist_backup", JSON.stringify(data));
   const loadChecklistBackup = () => {
     const backup = localStorage.getItem("client_checklist_backup");
-    if (backup) {
-      try {
-        const parsed: Checklist = JSON.parse(backup);
-        setChecklist(parsed);
-        return parsed;
-      } catch (err) {
-        console.error("Backup load error:", err);
-      }
-    }
+    if (backup) { try { const parsed = JSON.parse(backup); setChecklist(parsed); return parsed; } catch (err) {} }
     return {};
   };
 
   useEffect(() => {
-    const todayName = new Intl.DateTimeFormat("en-US", {
-      weekday: "long",
-    }).format(new Date()) as DayName;
+    const todayName = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date()) as DayName;
     const todayISO = new Date().toISOString().split("T")[0];
-
-    setActiveDayView(todayName);
-    setActiveDate(todayISO);
-
+    setActiveDayView(todayName); setActiveDate(todayISO);
+    
     const storedName = localStorage.getItem("name");
     const role = localStorage.getItem("role");
     const clientId = localStorage.getItem("clientId");
 
-    if (!role || role !== "client") {
-      router.replace("/login");
-      return;
-    }
-    setName(storedName || "Client");
+    if (!role || role !== "client") return router.replace("/login");
+    setName(storedName || "Warrior");
     loadChecklistBackup();
-
     if (clientId) fetchClientData(clientId);
   }, [router]);
 
-  // Fetch client data + checklist
   const fetchClientData = async (clientId: string) => {
     try {
       const res = await fetch(`/api/clients/${clientId}`);
       if (res.ok) {
         const data = await res.json();
         const client = data.client ? data.client : data;
-
-        setClientData({
-          ...client,
-          currentWeight: client.currentWeight || 0,
-          goalWeight: client.goalWeight || 0,
-          initialWeight: client.initialWeight || 0,
-        });
+        setClientData({ ...client, currentWeight: client.currentWeight || 0, goalWeight: client.goalWeight || 0, initialWeight: client.initialWeight || 0 });
         setWeightInput(String(client.currentWeight || 0));
         setInitialWeightInput(String(client.initialWeight || 0));
 
-        // load checklist rows
         const cRes = await fetch(`/api/clients/${clientId}/checklist`);
         if (cRes.ok) {
           const cData: any[] = await cRes.json();
           const map: Checklist = {};
           cData.forEach((item) => {
-            if (!map[item.date]) {
-              map[item.date] = { workouts: {}, diets: {} };
-            }
-            if (item.type === "workout" && item.workoutId) {
-              map[item.date].workouts[item.workoutId] = item.completed;
-            }
-            if (item.type === "diet" && item.dietId) {
-              map[item.date].diets[item.dietId] = item.completed;
-            }
+            if (!map[item.date]) map[item.date] = { workouts: {}, diets: {} };
+            if (item.type === "workout" && item.workoutId) map[item.date].workouts[item.workoutId] = item.completed;
+            if (item.type === "diet" && item.dietId) map[item.date].diets[item.dietId] = item.completed;
           });
           setChecklist(map);
         }
-      } else {
-        console.error("Failed to fetch client:", res.status);
       }
-    } catch (err) {
-      console.error("Fetch error:", err);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) {} finally { setLoading(false); }
   };
 
-  // Weight progress calculation
-  const calculateWeightProgress = () => {
-    if (!clientData) return 0;
-
-    const initialWeight = clientData.initialWeight || clientData.currentWeight;
-    const currentWeight = clientData.currentWeight;
-    const goalWeight = clientData.goalWeight;
-
-    if (initialWeight === 0 || goalWeight === 0 || initialWeight === goalWeight)
-      return 0;
-
-    if (initialWeight > goalWeight) {
-      const totalToLose = initialWeight - goalWeight;
-      const alreadyLost = initialWeight - currentWeight;
-      return Math.min(100, Math.round((alreadyLost / totalToLose) * 100));
-    } else {
-      const totalToGain = goalWeight - initialWeight;
-      const alreadyGained = currentWeight - initialWeight;
-      return Math.min(100, Math.round((alreadyGained / totalToGain) * 100));
-    }
-  };
-
-  // Weekly completion (per day: any workout done)
-  const getWeeklyProgress = () => {
-    const weeks = 7;
-    let completed = 0;
-    for (let i = 0; i < weeks; i++) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split("T")[0];
-      const dayChecks = checklist[dateStr];
-      if (dayChecks && Object.values(dayChecks.workouts || {}).some(Boolean)) {
-        completed++;
-      }
-    }
-    return { completed, total: weeks };
-  };
-
-  // Filter workouts and diets by active day
-  const filteredWorkouts =
-    clientData?.workouts?.filter(
-      (w) => (w.day || "").toLowerCase() === activeDayView.toLowerCase()
-    ) || [];
-
-  const filteredDiets = clientData?.diets || [];
-
-  // Universal toggle
   const handleToggleItem = async (itemId: string, type: "workout" | "diet") => {
     const clientId = localStorage.getItem("clientId");
     if (!clientId || !itemId) return;
 
-    const newChecklist: Checklist = { ...checklist };
+    const newChecklist = { ...checklist };
     ensureDate(activeDate, newChecklist);
 
+    let isNowCompleted = false;
     if (type === "workout") {
-      const current =
-        newChecklist[activeDate].workouts[itemId] ?? false;
-      newChecklist[activeDate].workouts[itemId] = !current;
+      isNowCompleted = !(newChecklist[activeDate].workouts[itemId] ?? false);
+      newChecklist[activeDate].workouts[itemId] = isNowCompleted;
+      if (isNowCompleted) setRestTimer(60); 
     } else {
-      const current = newChecklist[activeDate].diets[itemId] ?? false;
-      newChecklist[activeDate].diets[itemId] = !current;
+      newChecklist[activeDate].diets[itemId] = !(newChecklist[activeDate].diets[itemId] ?? false);
     }
 
-    setChecklist(newChecklist);
-    saveChecklist(newChecklist);
+    setChecklist(newChecklist); saveChecklist(newChecklist);
 
     try {
       await fetch(`/api/clients/${clientId}/checklist`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          date: activeDate,
-          type,
+          date: activeDate, type,
           workoutId: type === "workout" ? itemId : undefined,
           dietId: type === "diet" ? itemId : undefined,
-          completed:
-            type === "workout"
-              ? newChecklist[activeDate].workouts[itemId]
-              : newChecklist[activeDate].diets[itemId],
+          completed: type === "workout" ? newChecklist[activeDate].workouts[itemId] : newChecklist[activeDate].diets[itemId],
         }),
       });
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) {}
   };
 
-  // Set initial weight
-  const handleSetInitialWeight = async () => {
-    const clientId = localStorage.getItem("clientId");
-    if (!clientId || !clientData || !initialWeightInput) return;
-
-    setSavingInitialWeight(true);
-    try {
-      const res = await fetch(`/api/clients/${clientId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "updateInitialWeight",
-          initialWeight: parseFloat(initialWeightInput),
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const updated = data.client || data;
-        setClientData({
-          ...updated,
-          currentWeight: updated.currentWeight || 0,
-          goalWeight: updated.goalWeight || 0,
-          initialWeight: updated.initialWeight || 0,
-        });
-        alert("✅ Initial weight set! Progress tracking started 🚀");
-      } else {
-        alert("❌ Error setting initial weight");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("❌ Server error");
-    } finally {
-      setSavingInitialWeight(false);
-    }
-  };
-
-  // Update current weight
-  const handleUpdateWeight = async () => {
+  const handleUpdateWeight = async () => { 
     const clientId = localStorage.getItem("clientId");
     if (!clientId || !clientData) return;
     setSavingWeight(true);
     try {
       const res = await fetch(`/api/clients/${clientId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "updateWeight",
-          currentWeight: parseFloat(weightInput),
-        }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "updateWeight", currentWeight: parseFloat(weightInput) }),
       });
       if (res.ok) {
-        const data = await res.json();
-        const updated = data.client || data;
-        setClientData({
-          ...updated,
-          currentWeight: updated.currentWeight || 0,
-          goalWeight: updated.goalWeight || 0,
-          initialWeight: updated.initialWeight || 0,
-        });
-        alert(
-          "🎉 Weight Updated! Your progress is: " +
-            calculateWeightProgress() +
-            "%"
-        );
+        setClientData(prev => prev ? { ...prev, currentWeight: parseFloat(weightInput) } : null);
       }
-    } finally {
-      setSavingWeight(false);
-    }
+    } finally { setSavingWeight(false); }
+  };
+
+  const handleSetInitialWeight = async () => { 
+    const clientId = localStorage.getItem("clientId");
+    if (!clientId || !clientData || !initialWeightInput) return;
+    setSavingInitialWeight(true);
+    try {
+      const res = await fetch(`/api/clients/${clientId}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "updateInitialWeight", initialWeight: parseFloat(initialWeightInput) }),
+      });
+      if (res.ok) {
+        setClientData(prev => prev ? { ...prev, initialWeight: parseFloat(initialWeightInput) } : null);
+      }
+    } finally { setSavingInitialWeight(false); }
   };
 
   const handleChangePassword = async () => {
     if (newPassword !== confirmPassword) {
-      setPasswordError("Passwords do not match");
+      setPasswordError("Passwords do not match!");
       return;
     }
-    setSavingPassword(true);
+    setSavingPassword(true); setPasswordError("");
     try {
       const res = await fetch("/api/clients/change-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ clientId: clientData?.id, oldPassword, newPassword }),
       });
       if (res.ok) {
-        alert("✅ Password Changed Successfully!");
-        setShowPasswordModal(false);
-        setOldPassword("");
-        setNewPassword("");
-        setConfirmPassword("");
+        alert("✅ Security Vault Updated Successfully!");
+        setShowPasswordModal(false); setOldPassword(""); setNewPassword(""); setConfirmPassword("");
       } else {
-        setPasswordError("Failed to change password");
+        const data = await res.json(); setPasswordError(data.error || "Failed to update password");
       }
-    } finally {
-      setSavingPassword(false);
-    }
+    } catch (e) {
+      setPasswordError("System error. Try again later.");
+    } finally { setSavingPassword(false); }
   };
 
-  if (loading) return <div style={loaderStyle}>Loading FitVibs...</div>;
+  // --- STREAK & PROGRESS LOGIC ---
+  const calculateStreak = () => {
+    let currentStreak = 0; let streakBroken = false;
+    for(let i=0; i<365; i++) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const dayData = checklist[d.toISOString().split("T")[0]];
+      let workedOutToday = false;
+      if (dayData) {
+        const wCount = Object.values(dayData.workouts).filter(Boolean).length;
+        if (wCount > 0) workedOutToday = true;
+      }
+      if (workedOutToday) { if (!streakBroken) currentStreak++; } 
+      else { if (i !== 0) streakBroken = true; }
+    }
+    return currentStreak;
+  };
+
+  const calculateWeightProgress = () => {
+    if (!clientData) return 0;
+    const initial = clientData.initialWeight || clientData.currentWeight;
+    const current = clientData.currentWeight;
+    const goal = clientData.goalWeight;
+    if (initial === 0 || goal === 0 || initial === goal) return 0;
+    if (initial > goal) return Math.min(100, Math.max(0, Math.round(((initial - current) / (initial - goal)) * 100)));
+    return Math.min(100, Math.max(0, Math.round(((current - initial) / (goal - initial)) * 100)));
+  };
+
+  const generateWeeklyGraph = () => {
+    return Array.from({length: 7}, (_, i) => {
+      const d = new Date(); d.setDate(d.getDate() - (6 - i)); 
+      const dateStr = d.toISOString().split("T")[0];
+      const dayName = DAYS[d.getDay()].substring(0, 3);
+      
+      const dayChecks = checklist[dateStr] || { workouts: {}, diets: {} };
+      const wCompleted = Object.values(dayChecks.workouts).filter(Boolean).length;
+      const wAssigned = clientData?.workouts?.filter(w => w.day === DAYS[d.getDay()]).length || 0;
+      let wPercent = wAssigned > 0 ? Math.min(100, (wCompleted / wAssigned) * 100) : (wCompleted > 0 ? 100 : 0);
+
+      const dCompleted = Object.values(dayChecks.diets).filter(Boolean).length;
+      const dAssigned = clientData?.diets?.length || 0; 
+      let dPercent = dAssigned > 0 ? Math.min(100, (dCompleted / dAssigned) * 100) : (dCompleted > 0 ? 100 : 0);
+
+      return { dayName, wPercent, dPercent, isToday: i === 6 };
+    });
+  };
+
+  const filteredWorkouts = clientData?.workouts?.filter((w) => (w.day || "").toLowerCase() === activeDayView.toLowerCase()) || [];
+  const filteredDiets = clientData?.diets || [];
+  
+  const completedWorkoutsCount = filteredWorkouts.filter((w) => checklist[activeDate]?.workouts?.[w.id]).length;
+  const completedDietsCount = filteredDiets.filter((d) => checklist[activeDate]?.diets?.[d.id]).length;
+  const workoutProgressPercent = filteredWorkouts.length > 0 ? Math.round((completedWorkoutsCount / filteredWorkouts.length) * 100) : 0;
+  const dietProgressPercent = filteredDiets.length > 0 ? Math.round((completedDietsCount / filteredDiets.length) * 100) : 0;
 
   const weightProgress = calculateWeightProgress();
-  const weeklyProgress = getWeeklyProgress();
-  const showInitialWeightForm =
-    !clientData?.initialWeight || clientData.initialWeight === 0;
+  const weeklyGraphData = generateWeeklyGraph();
+  const currentStreak = calculateStreak();
 
-  // Summary counts
-  const completedWorkoutsCount = filteredWorkouts.filter(
-    (w) => checklist[activeDate]?.workouts?.[w.id]
-  ).length;
-  const completedDietsCount = filteredDiets.filter(
-    (d) => checklist[activeDate]?.diets?.[d.id]
-  ).length;
+  // 💥 NEW MOCK LOGIC FOR PLAN EXPIRY 💥
+  // Replace this with actual DB logic later (e.g. clientData.planExpiryDate)
+  const daysLeftInPlan = 4; // Example: Only 4 days left
+  const isExpiringSoon = daysLeftInPlan <= 5;
+
+  if (loading) return <div className="h-screen bg-[#020202] flex items-center justify-center text-emerald-500 font-black animate-pulse tracking-widest">CONNECTING TO HQ...</div>;
+
+  const currentEx = filteredWorkouts[activeWorkoutIdx];
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        background: "linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%)",
-        color: "#e5e7eb",
-      }}
-    >
+    <div className="min-h-screen bg-[#020202] text-white font-sans selection:bg-emerald-500/30 pb-24 overflow-x-hidden relative">
+      
+      {/* 🎬 CINEMATIC VIDEO MODAL */}
+      <AnimatePresence>
+        {expandedVideo && (
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} 
+            className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-3xl flex flex-col items-center justify-center p-6">
+            <button onClick={() => setExpandedVideo(null)} className="absolute top-8 right-8 text-white/50 hover:text-white transition-all bg-white/5 p-4 rounded-full"><X size={28} /></button>
+            <div className="w-full max-w-3xl rounded-[3rem] overflow-hidden border border-emerald-500/30 shadow-[0_0_80px_rgba(16,185,129,0.2)] bg-black">
+               {expandedVideo.includes(".mp4") ? <video src={expandedVideo} autoPlay loop controls playsInline className="w-full h-full object-cover max-h-[70vh]" /> : <img src={expandedVideo} className="w-full h-full object-contain max-h-[70vh]" />}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 🛑 REST TIMER OVERLAY */}
+      <AnimatePresence>
+        {restTimer > 0 && (
+          <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} 
+            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center">
+            <Timer size={60} className="text-emerald-500 mb-6 animate-pulse" />
+            <h2 className="text-2xl font-black uppercase tracking-widest text-white/50 mb-2">Recovery Phase</h2>
+            <div className="text-[120px] font-black italic text-emerald-500 leading-none tracking-tighter mb-10">{formatTime(restTimer)}</div>
+            <button onClick={() => setRestTimer(0)} className="border border-white/20 text-white/50 hover:bg-white/10 hover:text-white px-10 py-4 rounded-full font-black uppercase tracking-widest transition-all">Skip Recovery</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* HEADER */}
-      <header style={headerStyle}>
+      <header className="p-6 md:px-12 pt-10 flex justify-between items-start z-50 relative">
         <div>
-          <h1
-            style={{
-              fontSize: "24px",
-              fontWeight: 900,
-              margin: 0,
-              background: "linear-gradient(90deg, #3b82f6, #60a5fa)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-            }}
-          >
-            💪 Welcome, {name}!
+          <h1 className="text-4xl md:text-5xl font-black italic tracking-tighter uppercase leading-none">
+            Welcome, <span className="text-emerald-500">{name}</span>
           </h1>
-          <p
-            style={{
-              fontSize: "12px",
-              color: "#9ca3af",
-              margin: "4px 0 0 0",
-            }}
-          >
-            Keep grinding! Your transformation starts here 🚀
-          </p>
+          <p className="text-[10px] md:text-xs font-bold text-white/30 uppercase tracking-[0.4em] mt-2">Elite Command Center</p>
         </div>
-        <div style={{ display: "flex", gap: "10px" }}>
-          <button onClick={() => setShowPasswordModal(true)} style={btnSecondary}>
-            🔐 Pass
-          </button>
-          <button
-            onClick={() => {
-              localStorage.removeItem("name");
-              localStorage.removeItem("role");
-              localStorage.removeItem("clientId");
-              router.push("/login");
-            }}
-            style={btnDanger}
-          >
-            Logout
-          </button>
+        <div className="flex gap-3">
+          <button onClick={() => setShowPasswordModal(true)} className="p-3 bg-white/5 rounded-2xl border border-white/10 hover:border-emerald-500 transition-all"><Lock size={20} /></button>
+          <button onClick={() => { localStorage.clear(); router.push("/login"); }} className="p-3 bg-white/5 rounded-2xl border border-white/10 hover:border-red-500 transition-all"><LogOut size={20} /></button>
         </div>
       </header>
 
-      <main style={{ padding: "16px", maxWidth: "900px", margin: "0 auto" }}>
-        {/* INITIAL WEIGHT */}
-        {showInitialWeightForm && (
-          <section
-            style={{
-              ...sectionBox,
-              background: "rgba(16, 185, 129, 0.1)",
-              border: "2px solid #10b981",
-            }}
-          >
-            <h2 style={sectionTitle}>🎯 Set Your Starting Weight</h2>
-            <p
-              style={{
-                fontSize: "12px",
-                color: "#9ca3af",
-                marginBottom: "12px",
-              }}
+      <main className="max-w-6xl mx-auto px-6 md:px-12 space-y-8 mt-6">
+        
+        {/* 🚀 TOP ROW: COMPACT STREAK, PLAN & GOAL */}
+        <section className="grid lg:grid-cols-12 gap-4">
+          
+          {/* Box 1: Compact Streak */}
+          <div className={`lg:col-span-3 bg-white/[0.02] border border-white/5 rounded-[2rem] p-6 shadow-xl relative flex flex-col items-center justify-center text-center group overflow-hidden ${currentStreak >= 3 ? 'border-emerald-500/30' : ''}`}>
+             {currentStreak >= 3 && <div className="absolute inset-0 bg-emerald-500/5 blur-3xl rounded-full scale-150 animate-pulse" />}
+             <Flame size={36} className={`${currentStreak >= 3 ? 'text-emerald-500 drop-shadow-[0_0_15px_rgba(16,185,129,0.8)]' : 'text-white/20'} mb-2 transition-all duration-500 group-hover:scale-110`} />
+             <h3 className="text-3xl font-black italic tracking-tighter">{currentStreak} <span className="text-sm">DAYS</span></h3>
+             <p className="text-[9px] font-black uppercase tracking-[0.2em] text-white/40 mt-1">Active Streak</p>
+          </div>
+
+          {/* Box 2: Smart Plan Card (COMPACT & CONDITIONAL RENEW) */}
+          <div className="lg:col-span-4 bg-white/[0.02] border border-white/5 rounded-[2rem] p-6 shadow-xl flex flex-col justify-between relative overflow-hidden group">
+            <div className="absolute -top-4 -right-4 p-6 opacity-5 group-hover:scale-110 transition-transform"><Shield size={80}/></div>
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <h3 className="text-[9px] font-black uppercase tracking-[0.3em] text-white/50 flex items-center gap-2"><CreditCard size={12} className="text-emerald-500"/> Membership</h3>
+                {/* Dynamic Tag based on expiry */}
+                <span className={`text-[9px] font-bold px-2 py-1 rounded-md uppercase tracking-widest ${isExpiringSoon ? 'bg-red-500/20 text-red-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                  {isExpiringSoon ? `${daysLeftInPlan} Days Left` : 'Active'}
+                </span>
+              </div>
+              <p className="text-xl font-black italic mt-1 truncate">{clientData?.plan || "Standard Access"}</p>
+              <p className="text-[9px] text-white/40 mt-1 uppercase tracking-widest font-bold">Valid till: <span className="text-white/70">15 Mar, 2026</span></p>
+            </div>
+            {/* Conditional Button: Glows only if expiring soon */}
+            <button 
+              disabled={!isExpiringSoon}
+              onClick={() => alert("Redirecting to secure payment gateway...")} 
+              className={`w-full mt-4 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all ${isExpiringSoon ? 'bg-emerald-500 text-black shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400 active:scale-95' : 'bg-white/5 text-white/20 border border-white/5 cursor-not-allowed'}`}
             >
-              💡 Your starting weight is crucial to track real progress!
-            </p>
-            <div style={{ display: "flex", gap: "12px" }}>
-              <input
-                type="number"
-                step="0.1"
-                placeholder="Starting Weight (kg)"
-                value={initialWeightInput}
-                onChange={(e) => setInitialWeightInput(e.target.value)}
-                style={inputStyle}
-              />
-              <button
-                onClick={handleSetInitialWeight}
-                style={btnMain}
-                disabled={savingInitialWeight}
-              >
-                {savingInitialWeight ? "Setting..." : "Set Initial"}
+              {isExpiringSoon ? "Renew Plan Now" : "Plan Secured"}
+            </button>
+          </div>
+
+          {/* Box 3: Compact Goal Trajectory */}
+          <div className="lg:col-span-5 bg-white/[0.02] border border-white/5 rounded-[2rem] p-6 shadow-xl flex flex-col justify-between">
+            <h3 className="text-[9px] font-black uppercase tracking-[0.3em] text-white/50 mb-2 flex items-center gap-2"><Target size={12} className="text-emerald-500"/> Goal Trajectory</h3>
+            <div className="mt-4 mb-6 relative">
+              <div className="flex justify-between text-[9px] font-black text-white/30 uppercase tracking-widest mb-2">
+                <span>Start: {clientData?.initialWeight || 0}kg</span><span>Goal: {clientData?.goalWeight || 0}kg</span>
+              </div>
+              <div className="h-2 bg-white/5 rounded-full relative border border-white/10">
+                <motion.div initial={{ width: 0 }} animate={{ width: `${weightProgress}%` }} transition={{ duration: 1.5, ease: "easeOut" }} className="absolute top-0 left-0 h-full bg-emerald-500 rounded-full shadow-[0_0_15px_rgba(16,185,129,0.4)]" />
+                <motion.div initial={{ left: 0 }} animate={{ left: `calc(${weightProgress}% - 6px)` }} transition={{ duration: 1.5, ease: "easeOut" }} className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-[0_0_10px_white] border-2 border-emerald-500" />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <input type="number" value={weightInput} onChange={(e) => setWeightInput(e.target.value)} className="w-1/2 bg-black/40 border border-white/10 rounded-xl p-3 text-lg font-bold italic outline-none focus:border-emerald-500 transition-all text-white" placeholder="Mass KG" />
+              <button onClick={handleUpdateWeight} disabled={savingWeight} className="flex-1 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500 hover:text-black border border-emerald-500/30 rounded-xl font-black uppercase text-[9px] tracking-widest transition-all">
+                {savingWeight ? "Logging..." : "Log Mass"}
               </button>
             </div>
-          </section>
-        )}
-
-        {/* PROGRESS SECTION */}
-        <section style={sectionBox}>
-          <h2 style={sectionTitle}>📈 Your Transformation Journey</h2>
-
-          {/* Goal Progress */}
-          <div style={{ marginBottom: "20px" }}>
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginBottom: "8px",
-              }}
-            >
-              <span style={{ fontSize: "13px", fontWeight: 600 }}>
-                Goal Progress: {weightProgress}%
-              </span>
-              <span style={{ fontSize: "12px", color: "#9ca3af" }}>
-                {clientData?.currentWeight || 0}kg →{" "}
-                {clientData?.goalWeight || 0}kg
-              </span>
-            </div>
-            <div style={progressBarBg}>
-              <div
-                style={{
-                  ...progressBarFill,
-                  width: `${weightProgress}%`,
-                  background: "linear-gradient(90deg, #10b981, #34d399)",
-                }}
-              ></div>
-            </div>
-            <p
-              style={{
-                fontSize: "11px",
-                color: "#9ca3af",
-                margin: "8px 0 0 0",
-              }}
-            >
-              {weightProgress === 0
-                ? "⏳ Set initial weight to start tracking!"
-                : weightProgress < 50
-                ? "🔥 You're just getting started! Keep pushing!"
-                : weightProgress < 100
-                ? "💪 Halfway there! You're crushing it!"
-                : "🏆 Goal achieved! Time for a new challenge!"}
-            </p>
-          </div>
-
-          {/* Weekly Workouts */}
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginBottom: "8px",
-            }}
-          >
-            <span style={{ fontSize: "13px", fontWeight: 600 }}>
-              Weekly Workouts: {weeklyProgress.completed}/
-              {weeklyProgress.total}
-            </span>
-            <span style={{ fontSize: "12px", color: "#10b981" }}>
-              🔥{" "}
-              {Math.round(
-                (weeklyProgress.completed / weeklyProgress.total) * 100
-              )}
-              % Complete
-            </span>
-          </div>
-          <div style={progressBarBg}>
-            <div
-              style={{
-                ...progressBarFill,
-                width: `${
-                  (weeklyProgress.completed / weeklyProgress.total) * 100
-                }%`,
-                background: "linear-gradient(90deg, #10b981, #34d399)",
-              }}
-            ></div>
-          </div>
-
-          {/* 3 cards */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: "12px",
-              marginTop: "16px",
-            }}
-          >
-            <InfoCard
-              label="Initial Weight"
-              value={`${clientData?.initialWeight || 0}kg`}
-              color="#9ca3af"
-            />
-            <InfoCard
-              label="Current Weight"
-              value={`${clientData?.currentWeight || 0}kg`}
-              color="#3b82f6"
-            />
-            <InfoCard
-              label="Goal Weight"
-              value={`${clientData?.goalWeight || 0}kg`}
-              color="#10b981"
-            />
           </div>
         </section>
 
-        {/* DAILY SUMMARY CARDS */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "12px",
-            marginBottom: "16px",
-          }}
-        >
-          <CheckItem
-            title="Workouts"
-            done={completedWorkoutsCount === filteredWorkouts.length && filteredWorkouts.length > 0}
-            emoji="🏋️"
-            onClick={() => {}}
-            subtext={`${completedWorkoutsCount}/${filteredWorkouts.length} Done`}
-          />
-          <CheckItem
-            title="Diet Plan"
-            done={completedDietsCount === filteredDiets.length && filteredDiets.length > 0}
-            emoji="🥗"
-            onClick={() => {}}
-            subtext={`${completedDietsCount}/${filteredDiets.length} Done`}
-          />
-        </div>
+        {/* 💥 MID ROW: DUAL-METRIC GRAPH & TODAY'S EXECUTION HUD 💥 */}
+        <section className="grid lg:grid-cols-12 gap-6">
+          
+          {/* Equalizer Graph */}
+          <div className="lg:col-span-7 bg-white/[0.02] border border-white/5 rounded-[2.5rem] p-8 shadow-2xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:scale-110 transition-transform"><Activity size={100}/></div>
+            
+            <div className="flex justify-between items-start mb-6">
+              <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-white/50 flex items-center gap-2"><Activity size={14} className="text-emerald-500"/> Protocol Execution</h3>
+              <div className="flex gap-3">
+                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_5px_#10b981]"></div><span className="text-[8px] font-bold text-white/40 uppercase tracking-widest">Workout</span></div>
+                <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-white/70 shadow-[0_0_5px_white]"></div><span className="text-[8px] font-bold text-white/40 uppercase tracking-widest">Diet</span></div>
+              </div>
+            </div>
+            
+            <div className="flex justify-between items-end h-32 mt-4 gap-2 relative z-10">
+              {weeklyGraphData.map((day, i) => (
+                <div key={i} className="flex flex-col items-center gap-3 w-full">
+                  <div className="flex gap-1.5 w-full justify-center h-28 items-end">
+                    <div className="w-2.5 h-full bg-white/5 rounded-t-full relative overflow-hidden flex items-end">
+                      <motion.div initial={{ height: 0 }} animate={{ height: `${day.wPercent}%` }} transition={{ duration: 1, delay: i * 0.1 }}
+                        className={`w-full rounded-t-full ${day.wPercent === 100 ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]' : day.wPercent > 0 ? 'bg-emerald-500/50' : 'bg-transparent'}`} 
+                      />
+                    </div>
+                    <div className="w-2.5 h-full bg-white/5 rounded-t-full relative overflow-hidden flex items-end">
+                      <motion.div initial={{ height: 0 }} animate={{ height: `${day.dPercent}%` }} transition={{ duration: 1, delay: i * 0.1 + 0.2 }}
+                        className={`w-full rounded-t-full ${day.dPercent === 100 ? 'bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)]' : day.dPercent > 0 ? 'bg-white/40' : 'bg-transparent'}`} 
+                      />
+                    </div>
+                  </div>
+                  <p className={`text-[9px] font-black uppercase tracking-widest ${day.isToday ? 'text-emerald-500' : 'text-white/30'}`}>{day.dayName}</p>
+                </div>
+              ))}
+            </div>
+          </div>
 
-        {/* WEEKLY WORKOUTS */}
-        <section style={sectionBox}>
-          <h2 style={sectionTitle}>📅 Weekly Workouts</h2>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginBottom: "15px",
-              overflowX: "auto",
-              gap: "8px",
-            }}
-          >
+          {/* Today's Execution Rings */}
+          <div className="lg:col-span-5 flex flex-col gap-6">
+            <CircularHUD percent={workoutProgressPercent} color="#10b981" icon={<Dumbbell size={24}/>} label="Workout Execution" value={completedWorkoutsCount} subValue={`/ ${filteredWorkouts.length}`} />
+            <CircularHUD percent={dietProgressPercent} color="#ffffff" icon={<Utensils size={24}/>} label="Diet Protocol" value={completedDietsCount} subValue={`/ ${filteredDiets.length}`} />
+          </div>
+
+        </section>
+
+        {/* INITIAL WEIGHT OVERRIDE */}
+        {!clientData?.initialWeight && (
+          <div className="bg-emerald-500/10 border border-emerald-500/30 p-6 rounded-[2rem] flex gap-4 items-center justify-between">
+            <p className="text-xs font-bold text-emerald-500">Initialize starting weight to activate trajectory.</p>
+            <div className="flex gap-2">
+              <input type="number" value={initialWeightInput} onChange={e => setInitialWeightInput(e.target.value)} className="w-24 bg-black/50 border border-emerald-500/20 rounded-xl p-2 text-center font-bold outline-none text-white" placeholder="KG" />
+              <button onClick={handleSetInitialWeight} disabled={savingInitialWeight} className="bg-emerald-500 text-black px-4 rounded-xl font-black text-[10px] uppercase">Set</button>
+            </div>
+          </div>
+        )}
+
+        {/* 📅 MISSION SCHEDULER */}
+        <section>
+          <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
             {DAYS.map((day) => (
-              <button
-                key={day}
-                onClick={() => {
-                  setActiveDayView(day);
-                  setActiveDate(getISODateForWeekdayInCurrentWeek(day));
-                }}
-                style={activeDayView === day ? dayTabActive : dayTabInactive}
-              >
-                {day.slice(0, 3)}
+              <button key={day} onClick={() => { setActiveDayView(day); setActiveDate(getISODateForWeekdayInCurrentWeek(day)); setActiveWorkoutIdx(0); }}
+                className={`px-8 py-4 rounded-[1.5rem] text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-2 ${
+                  activeDayView === day ? "bg-emerald-500 text-black border-emerald-500 shadow-[0_0_20px_rgba(16,185,129,0.3)]" : "bg-white/5 text-white/30 border-transparent hover:border-white/10"
+                }`}>
+                {day}
               </button>
             ))}
           </div>
-          {filteredWorkouts.length > 0 ? (
-            filteredWorkouts.map((w) => {
-              const completed =
-                checklist[activeDate]?.workouts?.[w.id] || false;
-              return (
-                <div
-                  key={w.id}
-                  style={workoutRow}
-                  onClick={() => w.gifUrl && setZoomGif(w.gifUrl)}
-                >
-                  <input
-                    type="checkbox"
-                    checked={completed}
-                    onChange={() => handleToggleItem(w.id, "workout")}
-                    style={{
-                      width: "18px",
-                      height: "18px",
-                      cursor: "pointer",
-                      accentColor: "#3b82f6",
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                  <img
-                    src={w.gifUrl || "/placeholder.png"}
-                    style={thumbStyle}
-                    alt={w.exercise}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <p
-                      style={{
-                        fontWeight: 600,
-                        fontSize: "14px",
-                        color: completed ? "#64748b" : "#e5e7eb",
-                      }}
-                    >
-                      {w.exercise}
-                    </p>
-                    <p
-                      style={{
-                        fontSize: "12px",
-                        color: completed ? "#4b5563" : "#9ca3af",
-                      }}
-                    >
-                      {w.sets} Sets × {w.reps} Reps{" "}
-                      {w.weight && `@ ${w.weight}kg`}
-                    </p>
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <p
-              style={{
-                textAlign: "center",
-                color: "#4b5563",
-                padding: "20px",
-              }}
-            >
-              🛏️ Keep Growing your Workout will be Updated Tomorrow
-            </p>
-          )}
         </section>
 
-        {/* MEAL PLAN */}
-        <section style={sectionBox}>
-          <h2 style={sectionTitle}>🥗 Today's Meal Plan</h2>
-          {clientData?.diets && clientData.diets.length > 0 ? (
-            clientData.diets.map((d) => {
-              const completed =
-                checklist[activeDate]?.diets?.[d.id] || false;
-              return (
-                <div key={d.id} style={dietRowWithCheckbox}>
-                  <input
-                    type="checkbox"
-                    checked={completed}
-                    onChange={() => handleToggleItem(d.id, "diet")}
-                    style={{
-                      width: "18px",
-                      height: "18px",
-                      cursor: "pointer",
-                      accentColor: "#10b981",
-                    }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <span
-                      style={{
-                        fontWeight: 500,
-                        color: completed ? "#64748b" : "#e5e7eb",
-                      }}
-                    >
-                      {d.time} - {d.meal}
-                    </span>
-                  </div>
-                  <span
-                    style={{
-                      color: completed ? "#1d4ed8" : "#3b82f6",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {d.calories} cal
-                  </span>
-                </div>
-              );
-            })
-          ) : (
-            <p style={{ fontSize: "12px", color: "#9ca3af" }}>
-              No meals assigned yet
-            </p>
-          )}
-        </section>
+        {/* 🏋️ ELITE WORKOUT PLAYER */}
+        {filteredWorkouts.length > 0 ? (
+          <section className="bg-white/[0.02] border border-white/5 p-6 md:p-10 rounded-[3rem] shadow-2xl relative overflow-hidden">
+             <div className="flex items-center justify-between mb-8 relative z-10">
+                <div className="flex items-center gap-3"><Zap className="text-emerald-500"/><h3 className="text-2xl font-black italic uppercase tracking-tight">Active Protocol</h3></div>
+                <div className="bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20"><p className="text-[10px] font-black tracking-widest text-emerald-500">{activeWorkoutIdx + 1} OF {filteredWorkouts.length}</p></div>
+             </div>
 
-        {/* WEIGHT UPDATE */}
-        <section style={sectionBox}>
-          <h2 style={sectionTitle}>⚖️ Update Weight</h2>
-          <div style={{ display: "flex", gap: "10px" }}>
-            <input
-              type="number"
-              step="0.1"
-              value={weightInput}
-              onChange={(e) => setWeightInput(e.target.value)}
-              style={inputStyle}
-              placeholder="Enter weight (kg)"
-            />
-            <button
-              onClick={handleUpdateWeight}
-              style={btnMain}
-              disabled={savingWeight}
-            >
-              {savingWeight ? "Saving..." : "Update"}
-            </button>
+             <div className="grid lg:grid-cols-12 gap-10 items-start relative z-10">
+                <div className="lg:col-span-7 relative group cursor-pointer" onClick={() => currentEx.gifUrl && setExpandedVideo(currentEx.gifUrl)}>
+                   <div className="aspect-square md:aspect-video rounded-[2.5rem] overflow-hidden bg-black border border-white/10 relative shadow-[0_20px_50px_rgba(0,0,0,0.5)] transition-all group-hover:border-emerald-500/50">
+                      <AnimatePresence mode="wait">
+                         <motion.div key={currentEx.id} initial={{opacity:0, filter:"blur(10px)"}} animate={{opacity:1, filter:"blur(0px)"}} exit={{opacity:0}} className="w-full h-full">
+                           {currentEx.gifUrl ? (
+                             currentEx.gifUrl.includes(".mp4") ? <video src={currentEx.gifUrl} autoPlay loop muted playsInline className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" /> : <img src={currentEx.gifUrl} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                           ) : (
+                             <div className="w-full h-full flex items-center justify-center text-white/5"><Dumbbell size={100}/></div>
+                           )}
+                         </motion.div>
+                      </AnimatePresence>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
+                      {currentEx.gifUrl && (
+                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="bg-black/50 p-4 rounded-full backdrop-blur-md border border-white/20 text-white"><PlayCircle size={40} className="text-emerald-500" /></div>
+                         </div>
+                      )}
+                      <div className="absolute bottom-8 left-8 right-8 pointer-events-none">
+                         <h2 className="text-3xl md:text-5xl font-black italic uppercase tracking-tighter leading-none">{currentEx.exercise}</h2>
+                      </div>
+                   </div>
+                </div>
+
+                <div className="lg:col-span-5 flex flex-col h-full justify-between space-y-6">
+                   <div className="grid grid-cols-3 gap-3">
+                     <div className="bg-white/5 border border-white/10 rounded-[1.5rem] p-5 text-center"><p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">Sets</p><p className="text-3xl font-black italic text-emerald-500">{currentEx.sets}</p></div>
+                     <div className="bg-white/5 border border-white/10 rounded-[1.5rem] p-5 text-center"><p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">Reps</p><p className="text-3xl font-black italic text-emerald-500">{currentEx.reps}</p></div>
+                     <div className="bg-white/5 border border-white/10 rounded-[1.5rem] p-5 text-center"><p className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-1">Weight</p><p className="text-3xl font-black italic text-white">{currentEx.weight || "-"}</p></div>
+                   </div>
+
+                   {currentEx.insight && (
+                     <div className="bg-emerald-500/5 border border-emerald-500/20 p-6 rounded-[1.5rem]">
+                       <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-2"><Flame size={12} className="inline mr-1 -mt-1"/> Trainer's Note</p>
+                       <p className="text-white/60 italic text-sm">"{currentEx.insight}"</p>
+                     </div>
+                   )}
+
+                   <div className="space-y-4 pt-4">
+                     <button onClick={() => handleToggleItem(currentEx.id, "workout")} className={`w-full py-6 rounded-3xl font-black uppercase text-sm tracking-[0.2em] transition-all flex items-center justify-center gap-3 ${checklist[activeDate]?.workouts?.[currentEx.id] ? "bg-white/5 text-emerald-500 border border-emerald-500/30" : "bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_20px_40px_rgba(16,185,129,0.3)] active:scale-95"}`}>
+                        <CheckCircle2 size={24} /> {checklist[activeDate]?.workouts?.[currentEx.id] ? "Done" : "Mark as Done"}
+                     </button>
+                     <div className="flex gap-4">
+                        <button onClick={() => setActiveWorkoutIdx(prev => prev - 1)} disabled={activeWorkoutIdx === 0} className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 py-5 rounded-3xl flex justify-center disabled:opacity-20 transition-all"><ChevronLeft /></button>
+                        <button onClick={() => setActiveWorkoutIdx(prev => prev + 1)} disabled={activeWorkoutIdx === filteredWorkouts.length - 1} className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 py-5 rounded-3xl flex justify-center disabled:opacity-20 transition-all"><ChevronRight /></button>
+                     </div>
+                   </div>
+                </div>
+             </div>
+          </section>
+        ) : (
+          <div className="text-center py-24 bg-white/[0.02] border border-white/5 rounded-[3rem] shadow-2xl">
+             <h2 className="text-3xl font-black italic text-white/30 uppercase tracking-widest">Rest & Recover</h2>
           </div>
-          <p
-            style={{
-              fontSize: "11px",
-              color: "#9ca3af",
-              marginTop: "8px",
-            }}
-          >
-            💡 Updating weight will automatically recalculate your progress!
-          </p>
+        )}
+
+        {/* 🥗 NUTRITION FUEL */}
+        <section className="bg-white/[0.02] border border-white/5 rounded-[3rem] p-8 shadow-2xl">
+          <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-white/50 mb-6 flex items-center gap-2"><Utensils size={14} className="text-emerald-500"/> Diet Protocol</h3>
+          <div className="grid md:grid-cols-2 gap-4">
+            {filteredDiets.map((d) => {
+              const isDone = checklist[activeDate]?.diets?.[d.id] || false;
+              return (
+                <div key={d.id} onClick={() => handleToggleItem(d.id, "diet")} className={`p-5 rounded-[1.5rem] border flex items-center justify-between cursor-pointer transition-all ${isDone ? "bg-emerald-500/5 border-emerald-500/20" : "bg-white/5 border-white/10 hover:border-emerald-500/50"}`}>
+                    <div>
+                      <p className="text-[10px] font-black uppercase text-emerald-500 tracking-widest mb-1">{d.time}</p>
+                      <p className={`font-bold ${isDone ? "text-white/40 line-through" : "text-white"}`}>{d.meal}</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <span className="text-xs font-black italic text-white/30">{d.calories} KCAL</span>
+                      <div className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${isDone ? "border-emerald-500 bg-emerald-500" : "border-white/20"}`}>
+                        {isDone && <CheckCircle2 size={16} className="text-black" />}
+                      </div>
+                    </div>
+                </div>
+              )
+            })}
+          </div>
         </section>
+
       </main>
 
-      {/* GIF ZOOM */}
-      {zoomGif && (
-        <div style={overlay} onClick={() => setZoomGif(null)}>
-          <img src={zoomGif} style={zoomedImg} alt="workout" />
-        </div>
-      )}
+      {/* 🔐 SECRETS MODAL */}
+      <AnimatePresence>
+        {showPasswordModal && (
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="fixed inset-0 z-[200] bg-black/90 backdrop-blur-md flex items-center justify-center p-6">
+             <div className="bg-[#0b0b0b] border border-emerald-500/30 p-10 rounded-[3rem] w-full max-w-md shadow-[0_0_50px_rgba(16,185,129,0.1)]">
+               <div className="flex justify-between items-center mb-8">
+                 <h3 className="text-2xl font-black italic text-emerald-500 uppercase tracking-tighter">Security Vault</h3>
+                 <button onClick={() => setShowPasswordModal(false)} className="text-white/50 hover:text-white"><X/></button>
+               </div>
+               <div className="space-y-4">
+                 <input type="password" placeholder="Current Password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} className="w-full p-5 bg-white/5 rounded-2xl outline-none focus:border-emerald-500 border border-white/10 text-white" />
+                 <input type="password" placeholder="New Password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full p-5 bg-white/5 rounded-2xl outline-none focus:border-emerald-500 border border-white/10 text-white" />
+                 <input type="password" placeholder="Confirm Password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full p-5 bg-white/5 rounded-2xl outline-none focus:border-emerald-500 border border-white/10 text-white" />
+                 
+                 {passwordError && <p className="text-red-500 text-xs font-bold uppercase tracking-widest">{passwordError}</p>}
+                 
+                 <button onClick={handleChangePassword} disabled={savingPassword} className="w-full py-5 mt-4 bg-emerald-500 text-black font-black uppercase rounded-2xl tracking-widest active:scale-95 transition-all shadow-[0_10px_30px_rgba(16,185,129,0.2)] disabled:opacity-50">
+                   {savingPassword ? "Updating..." : "Update Vault"}
+                 </button>
+               </div>
+             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* PASSWORD MODAL */}
-      {showPasswordModal && (
-        <div style={modalBg}>
-          <div style={modalContent}>
-            <h3
-              style={{
-                marginBottom: "15px",
-                fontSize: "16px",
-                fontWeight: 700,
-              }}
-            >
-              🔐 Change Password
-            </h3>
-            <input
-              type="password"
-              placeholder="Old Password"
-              style={inputStyle}
-              value={oldPassword}
-              onChange={(e) => setOldPassword(e.target.value)}
-            />
-            <input
-              type="password"
-              placeholder="New Password"
-              style={{ ...inputStyle, marginTop: "10px" }}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-            />
-            <input
-              type="password"
-              placeholder="Confirm Password"
-              style={{ ...inputStyle, marginTop: "10px" }}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
-            {passwordError && (
-              <p
-                style={{
-                  color: "#ef4444",
-                  fontSize: "12px",
-                  marginTop: "8px",
-                }}
-              >
-                ❌ {passwordError}
-              </p>
-            )}
-            <div
-              style={{
-                display: "flex",
-                gap: "10px",
-                marginTop: "20px",
-              }}
-            >
-              <button
-                onClick={handleChangePassword}
-                style={btnMain}
-                disabled={savingPassword}
-              >
-                {savingPassword ? "Saving..." : "Change"}
-              </button>
-              <button
-                onClick={() => setShowPasswordModal(false)}
-                style={btnSecondary}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
-// Sub components
-function InfoCard({ label, value, color }: any) {
+// 🟢 CUSTOM COMPONENT: CIRCULAR HUD
+function CircularHUD({ percent, color, icon, label, value, subValue }: any) {
+  const dashArray = 126; 
+  const dashOffset = dashArray - (dashArray * percent) / 100;
   return (
-    <div
-      style={{
-        background: "rgba(59, 130, 246, 0.1)",
-        padding: "12px",
-        borderRadius: "10px",
-        border: `1px solid ${color}33`,
-      }}
-    >
-      <p
-        style={{
-          fontSize: "11px",
-          color: "#9ca3af",
-          margin: 0,
-          marginBottom: "4px",
-        }}
-      >
-        {label}
-      </p>
-      <p
-        style={{
-          fontSize: "16px",
-          fontWeight: 700,
-          margin: 0,
-          color: color,
-        }}
-      >
-        {value}
-      </p>
+    <div className="flex flex-1 items-center gap-6 bg-white/[0.02] border border-white/5 rounded-[2rem] p-6 shadow-xl relative overflow-hidden group">
+      <div className="absolute inset-0 opacity-10 blur-2xl transition-all group-hover:opacity-20" style={{ backgroundColor: color }} />
+      <div className="relative w-16 h-16 flex items-center justify-center shrink-0">
+        <svg className="absolute w-full h-full -rotate-90 drop-shadow-xl" viewBox="0 0 48 48">
+          <circle cx="24" cy="24" r="20" fill="transparent" stroke="rgba(255,255,255,0.05)" strokeWidth="4" />
+          <circle cx="24" cy="24" r="20" fill="transparent" stroke={color} strokeWidth="4" strokeDasharray={dashArray} strokeDashoffset={dashOffset} strokeLinecap="round" className="transition-all duration-1000 ease-out" />
+        </svg>
+        <div className="absolute" style={{ color }}>{icon}</div>
+      </div>
+      <div>
+        <h4 className="text-white/50 text-[10px] font-black uppercase tracking-[0.2em] mb-1">{label}</h4>
+        <p className="text-3xl font-black italic text-white">{value} <span className="text-sm not-italic text-white/30">{subValue}</span></p>
+      </div>
     </div>
   );
 }
-
-function CheckItem({ title, done, emoji, onClick, subtext }: any) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        background: done
-          ? "linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(52, 211, 153, 0.1))"
-          : "#1a1f2e",
-        border: `2px solid ${done ? "#10b981" : "#2d3748"}`,
-        borderRadius: "14px",
-        padding: "16px",
-        cursor: "pointer",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "6px",
-        transition: "all 0.3s ease",
-      }}
-    >
-      <span style={{ fontSize: "24px" }}>{emoji}</span>
-      <span style={{ fontSize: "13px", fontWeight: 700 }}>{title}</span>
-      <span style={{ fontSize: "10px", color: "#9ca3af" }}>{subtext}</span>
-      <span
-        style={{
-          fontSize: "11px",
-          color: done ? "#10b981" : "#4b5563",
-          fontWeight: 500,
-        }}
-      >
-        {done ? "✓ Completed" : "⏳ Pending"}
-      </span>
-    </button>
-  );
-}
-
-// Styles
-const headerStyle = {
-  padding: "20px 16px",
-  background: "#1a1f2e",
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  borderBottom: "2px solid #2d3748",
-};
-const btnSecondary = {
-  background: "none",
-  border: "1.5px solid #3b82f6",
-  color: "#3b82f6",
-  padding: "6px 12px",
-  borderRadius: "8px",
-  fontSize: "12px",
-  fontWeight: 600,
-  cursor: "pointer",
-};
-const btnDanger = {
-  background: "none",
-  border: "1.5px solid #ef4444",
-  color: "#ef4444",
-  padding: "6px 12px",
-  borderRadius: "8px",
-  fontSize: "12px",
-  fontWeight: 600,
-  cursor: "pointer",
-};
-const sectionBox = {
-  background: "#1a1f2e",
-  padding: "16px",
-  borderRadius: "16px",
-  marginBottom: "16px",
-  border: "1px solid #2d3748",
-};
-const sectionTitle = {
-  fontSize: "12px",
-  color: "#9ca3af",
-  fontWeight: 700,
-  textTransform: "uppercase" as "uppercase",
-  marginBottom: "12px",
-  letterSpacing: "0.5px",
-};
-const progressBarBg = {
-  width: "100%",
-  height: "12px",
-  background: "#0f1419",
-  borderRadius: "10px",
-  overflow: "hidden",
-};
-const progressBarFill = {
-  height: "100%",
-  borderRadius: "10px",
-  transition: "width 0.5s ease",
-};
-const dayTabActive = {
-  background: "linear-gradient(90deg, #3b82f6, #60a5fa)",
-  color: "#fff",
-  border: "none",
-  padding: "8px 14px",
-  borderRadius: "8px",
-  fontSize: "12px",
-  fontWeight: 700,
-  cursor: "pointer",
-};
-const dayTabInactive = {
-  background: "#0f1419",
-  color: "#9ca3af",
-  border: "1px solid #2d3748",
-  padding: "8px 14px",
-  borderRadius: "8px",
-  fontSize: "12px",
-  cursor: "pointer",
-};
-const workoutRow = {
-  display: "flex",
-  alignItems: "center",
-  gap: "12px",
-  background: "#0f1419",
-  padding: "12px",
-  borderRadius: "12px",
-  marginBottom: "10px",
-  cursor: "pointer",
-  transition: "all 0.2s",
-};
-const thumbStyle = {
-  width: "55px",
-  height: "55px",
-  borderRadius: "10px",
-  objectFit: "cover" as "cover",
-};
-const dietRowWithCheckbox = {
-  display: "flex",
-  alignItems: "center",
-  gap: "10px",
-  padding: "10px 0",
-  borderBottom: "1px solid #ffffff08",
-  fontSize: "13px",
-};
-const inputStyle = {
-  flex: 1,
-  padding: "12px",
-  background: "#0f1419",
-  border: "1.5px solid #2d3748",
-  color: "white",
-  borderRadius: "10px",
-  fontSize: "13px",
-};
-const btnMain = {
-  background: "linear-gradient(90deg, #3b82f6, #60a5fa)",
-  color: "#fff",
-  border: "none",
-  padding: "10px 20px",
-  borderRadius: "10px",
-  fontWeight: 700,
-  cursor: "pointer",
-  transition: "all 0.2s",
-};
-const overlay = {
-  position: "fixed" as "fixed",
-  top: 0,
-  left: 0,
-  width: "100%",
-  height: "100%",
-  background: "rgba(0,0,0,0.95)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  zIndex: 1000,
-};
-const zoomedImg = {
-  maxWidth: "90%",
-  maxHeight: "80vh",
-  borderRadius: "20px",
-};
-const loaderStyle = {
-  minHeight: "100vh",
-  background: "#0f1419",
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
-  color: "#9ca3af",
-  fontSize: "16px",
-};
-const modalBg = {
-  position: "fixed" as "fixed",
-  top: 0,
-  left: 0,
-  width: "100%",
-  height: "100%",
-  background: "rgba(0,0,0,0.85)",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  zIndex: 1001,
-};
-const modalContent = {
-  background: "#1a1f2e",
-  padding: "24px",
-  borderRadius: "16px",
-  width: "90%",
-  maxWidth: "400px",
-  border: "1px solid #2d3748",
-};
