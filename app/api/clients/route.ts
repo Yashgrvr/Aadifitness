@@ -1,40 +1,34 @@
-import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 
-export const dynamic = 'force-dynamic';
-
-const prisma = new PrismaClient();
-
-export async function GET(req: NextRequest) {
+export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const trainerId = searchParams.get("trainerId");
 
     if (!trainerId) {
-      return NextResponse.json(
-        { error: "trainerId is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Trainer ID required" }, { status: 400 });
     }
 
+    // Trainer ke saare clients fetch karo unke nested data ke saath
     const clients = await prisma.client.findMany({
       where: { 
-        trainerId,
-        // ✅ FIXED: Sirf un clients ko dikhayein jinka password set ho chuka hai (Active Clients)
-        // Jab tak password 'null' hai, client sirf pending list mein dikhega.
-        NOT: {
-          password: null,
-        },
+        trainerId: trainerId,
+        paymentStatus: "completed" // Sirf unhe dikhao jinka payment ho chuka hai
       },
       include: {
         workouts: true,
         diets: true,
+        checklistItems: true
       },
+      orderBy: {
+        createdAt: 'desc'
+      }
     });
 
     return NextResponse.json({ clients });
-  } catch (err) {
-    console.error("GET /api/clients error:", err);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  } catch (error) {
+    console.error("API ERROR:", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

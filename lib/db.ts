@@ -1,39 +1,17 @@
-import { MongoClient } from "mongodb";
+// lib/db.ts
+import { PrismaClient } from "@prisma/client";
 
-const uri = process.env.MONGODB_URI as string;
-const dbName = process.env.MONGODB_DB as string;
-
-if (!uri) {
-  throw new Error("Please add MONGODB_URI to .env.local");
-}
-
-// Yahan options add karein:
-const options = {
-  // Windows / corporate network me SSL issues ke liye
-  tls: true,
-  tlsAllowInvalidCertificates: true,
+// Next.js development mode mein multiple instances se bachne ke liye singleton pattern
+const prismaClientSingleton = () => {
+  return new PrismaClient();
 };
-
-let client: MongoClient | null = null;
-let clientPromise: Promise<MongoClient>;
 
 declare global {
   // eslint-disable-next-line no-var
-  var _mongoClientPromise: Promise<MongoClient> | undefined;
+  var prisma: undefined | ReturnType<typeof prismaClientSingleton>;
 }
 
-if (process.env.NODE_ENV === "development") {
-  if (!global._mongoClientPromise) {
-    client = new MongoClient(uri, options);
-    global._mongoClientPromise = client.connect();
-  }
-  clientPromise = global._mongoClientPromise;
-} else {
-  client = new MongoClient(uri, options);
-  clientPromise = client.connect();
-}
+// Yahan se 'prisma' export ho raha hai jo aapke API routes ko chahiye
+export const prisma = globalThis.prisma ?? prismaClientSingleton();
 
-export async function getDb() {
-  const client = await clientPromise;
-  return client.db(dbName || "pt_platform");
-}
+if (process.env.NODE_ENV !== "production") globalThis.prisma = prisma;
