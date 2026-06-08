@@ -74,6 +74,7 @@ export async function POST(req: NextRequest) {
         status: "pending",
         clientEmail: client.email,
         clientName: client.name,
+        clientId: client.id, // ✅ FIXED: Added clientId here to satisfy Prisma relation
         planDuration: plan === "1_month" ? 30 : plan === "3_months" ? 90 : 180,
         trainerId: client.trainerId || DEFAULT_TRAINER_ID,
       },
