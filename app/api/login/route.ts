@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Plain-text compare (until trainer passwords भी hash करोगे)
+      // Plain-text compare (until trainer passwords bhi hash करोगे)
       const isPasswordValid = password === trainer.password;
       console.log("TRAINER PASSWORD CHECK:", isPasswordValid);
 
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
         where: { email },
         include: {
           trainer: true,
-          payment: true,
+          payments: true, // ✅ FIXED: Changed to 'payments'
         },
       });
       console.log("CLIENT LOOKUP:", email, client);
