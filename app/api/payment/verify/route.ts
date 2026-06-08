@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     const subscriptionEndDate = new Date();
     subscriptionEndDate.setDate(subscriptionEndDate.getDate() + planDuration);
 
-    // 5. Client record update karein aur Payment ke saath LINK karein
+    // 5. Client record update karein
     await prisma.client.update({
       where: { id: clientId },
       data: {
@@ -57,8 +57,7 @@ export async function POST(req: NextRequest) {
         // Manual map ki jagah direct payment record ka amount use karein
         planAmount: payment.amount, 
         plan,
-        // CRITICAL: Dono tables ko aapas mein link karne ke liye
-        paymentId: payment.id, 
+        // ✅ FIXED: Removed 'paymentId' field. Prisma now links via clientId in the Payment table automatically.
       },
     });
 
