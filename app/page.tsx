@@ -325,8 +325,8 @@ export default function HomePage() {
           {["Consult", "Custom Plan", "Track Daily", "Transform"].map((step, i) => (
             <motion.div 
               key={i} 
-              initial={{ opacity: 0, y: 20, md: { x: -20, y: 0 } }}
-              whileInView={{ opacity: 1, y: 0, md: { x: 0 } }}
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: i * 0.15 }}
               className="flex flex-col md:flex-row items-center gap-3 md:gap-4 text-center md:text-left"
