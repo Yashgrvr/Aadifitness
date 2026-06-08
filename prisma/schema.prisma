@@ -30,42 +30,45 @@ enum FitnessGoal {
 }
 
 model Client {
-  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  id                  String         @id @default(auto()) @map("_id") @db.ObjectId
   name                String
-  email               String    @unique
+  email               String         @unique
   password            String?
   passwordGeneratedAt DateTime?
   passwordExpiresAt   DateTime?
   currentWeight       Float
-  initialWeight       Float?    
+  initialWeight       Float?
   goalWeight          Float
   fitnessGoal         FitnessGoal?
   plan                String
   progress            Int
   sessionsCompleted   Int
   sessionsTotal       Int
-  paymentStatus       String    @default("pending")
+  paymentStatus       String         @default("pending")
   subscriptionDate    DateTime?
   subscriptionEndDate DateTime?
-  planDuration        Int       @default(30)
-  planAmount          Int       @default(0)
-  credentialsSent     Boolean   @default(false)
+  planDuration        Int            @default(30)
+  planAmount          Int            @default(0)
+  credentialsSent     Boolean        @default(false)
+  
+  // Relations
   workouts            Workout[]
   diets               Diet[]
-  checklist           Json?
-  trainerId           String    @db.ObjectId
-  trainer             Trainer   @relation(fields: [trainerId], references: [id], onDelete: Cascade)
-  payment             Payment?  @relation(fields: [paymentId], references: [id])
-  paymentId           String?   @db.ObjectId
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
   checklistItems      ChecklistItem[]
+  payments            Payment[]      // A client can have multiple payments over time
+
+  trainerId           String         @db.ObjectId
+  trainer             Trainer        @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+  
+  checklist           Json?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 }
 
 model Payment {
   id                String   @id @default(auto()) @map("_id") @db.ObjectId
   razorpayOrderId   String   @unique
-  razorpayPaymentId String? 
+  razorpayPaymentId String?
   razorpaySignature String? 
   
   amount            Int      
@@ -77,55 +80,55 @@ model Payment {
   planDuration      Int      @default(30) 
   notes             String?
 
+  // Trainer Relation
   trainerId         String   @db.ObjectId
   trainer           Trainer  @relation(fields: [trainerId], references: [id], onDelete: Cascade)
   
-  clients           Client[]
+  // Corrected Client Relation (One client to many payments)
+  clientId          String   @db.ObjectId
+  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }
 
-
 model Workout {
-  id       String @id @default(auto()) @map("_id") @db.ObjectId
-  exercise String
-  sets     String
-  reps     String
-  weight   String? // Isse optional rakha hai bodyweight exercises ke liye
-
-
-  gifUrl   String? // Cloudinary GIF link ke liye
-  day      String? // Monday, Tuesday, etc. save karne ke liye
-  insight  String?
-  clientId String @db.ObjectId
-  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  exercise  String
+  sets      String
+  reps      String
+  weight    String?  // Optional for bodyweight tracking
+  gifUrl    String?  // Cloudinary links
+  day       String?  // e.g., Monday, Tuesday
+  insight   String?
+  
+  clientId  String   @db.ObjectId
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 }
 
 model Diet {
-  id       String @id @default(auto()) @map("_id") @db.ObjectId
-  time     String
-  meal     String
-  calories Int
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  time      String
+  meal      String
+  calories  Int
 
-  clientId String @db.ObjectId
-  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId  String   @db.ObjectId
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 }
 
 model ChecklistItem {
-  id        String  @id @default(auto()) @map("_id") @db.ObjectId
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
   date      String
-  type      String  @default("workout") 
+  type      String   @default("workout") 
   itemId    String
-  completed Boolean @default(false)
+  completed Boolean  @default(false)
 
-  clientId String @db.ObjectId
-  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId  String   @db.ObjectId
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 
